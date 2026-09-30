@@ -294,3 +294,4 @@ button.jobs-more:hover { text-decoration: underline; }
 .import-mode label.is-on.is-danger { border-color: var(--stuck); background: oklch(0.97 0.02 25); }
 .import-mode input { margin-top: 4px; accent-color: oklch(0.52 0.17 255); }
 .import-summary { font-size: 14.5px; padding: 10px 14px; border-radius: 14px; background: var(--hover); }
+.add-btn.is-full { background: oklch(1 0 0 / 0.16); color: var(--on-navy-muted); cursor: default; }

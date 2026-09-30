@@ -6,7 +6,7 @@ import { BlockerSummary, TrendPanel } from './components/Insights.jsx';
 import { ImpactModal, JobModal, Lightbox } from './components/Modals.jsx';
 import { ConfirmDialog, PasswordDialog, Toast } from './components/Feedback.jsx';
 import { EmptyState, StatusPanel } from './components/States.jsx';
-import { FILTERS } from './lib/data.js';
+import { FILTERS, MAX_JOBS_PER_PLANT } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
 import { readLocalBackup, useDashboardStore } from './lib/store.js';
@@ -27,6 +27,7 @@ const ERROR_TEXT = {
   bad_request: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง ตรวจสอบช่องที่กรอกแล้วลองใหม่',
   wrong_key: 'รหัสผ่านทีมไม่ถูกต้องหรือถูกเปลี่ยนแล้ว กดอัปเดตงานประจำวันแล้วใส่รหัสใหม่',
   read_only: 'บัญชีนี้ดูได้อย่างเดียว ขอสิทธิ์แก้ไขจากผู้ดูแลแดชบอร์ด',
+  plant_full: `โรงนี้มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือแก้งานเดิมแทนการเพิ่มใหม่`,
 };
 const errorText = (e) => ERROR_TEXT[e?.code] || `บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่${e?.detail ? ` (${e.detail})` : ''}`;
 
@@ -297,6 +298,7 @@ export default function App() {
       {modal?.type === 'job' && (
         <JobModal
           initial={modal.job}
+          jobs={data.jobs}
           busy={busy}
           onSave={async (job) => {
             await run(() => store.saveJob(job), job.status === 'done' ? 'บันทึกแล้ว · งานที่เสร็จแล้วย้ายไปอยู่ท้ายรายการของโรง' : 'บันทึกแล้ว');

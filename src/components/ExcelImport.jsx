@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { planImport } from '../lib/excel.js';
+import { MAX_JOBS_PER_PLANT } from '../lib/data.js';
 
 // Preview of an Excel import: what was read, what is wrong, and what will change, before saving.
 export default function ExcelImportDialog({ fileName, parsed, current, busy, onConfirm, onCancel }) {
@@ -49,6 +50,15 @@ export default function ExcelImportDialog({ fileName, parsed, current, busy, onC
             </label>
           </fieldset>
 
+          {plan.overflow.length > 0 && (
+            <div className="import-errors">
+              <div className="field-label is-bad">นำเข้าไม่ได้: แต่ละโรงมีได้ไม่เกิน {MAX_JOBS_PER_PLANT} งาน</div>
+              <ul>
+                {plan.overflow.map((o) => <li key={o.plant}>โรงไฟฟ้า {o.plant} จะมี {o.count} งาน — ลดในไฟล์ให้เหลือ {MAX_JOBS_PER_PLANT} งาน{mode === 'merge' ? ' หรือเลือก "แทนที่ข้อมูลทั้งหมด"' : ''}</li>)}
+              </ul>
+            </div>
+          )}
+
           <div className="import-summary">
             ผลลัพธ์: เพิ่มใหม่ <b>{plan.added}</b> · อัปเดต <b>{plan.updated}</b>
             {mode === 'replace' && <> · <span className="is-bad">ลบ <b>{plan.removed}</b> งานที่ไม่มีในไฟล์</span></>}
@@ -61,7 +71,7 @@ export default function ExcelImportDialog({ fileName, parsed, current, busy, onC
             <button
               type="button"
               className={`btn ${mode === 'replace' ? 'btn-danger-solid' : 'btn-save'}`}
-              disabled={busy || parsed.jobs.length === 0}
+              disabled={busy || parsed.jobs.length === 0 || plan.overflow.length > 0}
               onClick={() => onConfirm({ jobs: plan.jobs, plants: parsed.plants, replace: mode === 'replace' }, plan)}
             >
               {busy ? 'กำลังนำเข้า…' : `นำเข้า ${parsed.jobs.length} งาน`}

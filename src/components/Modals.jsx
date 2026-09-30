@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Icon from '../lib/icons.jsx';
-import { PLANT_META } from '../lib/data.js';
+import { MAX_JOBS_PER_PLANT, PLANT_META } from '../lib/data.js';
 import { iso, pd, thD, today0 } from '../lib/dates.js';
 import { shrinkImage } from '../lib/photos.js';
 
@@ -64,9 +64,10 @@ function Field({ label, wide, children }) {
   );
 }
 
-export function JobModal({ initial, busy, onSave, onDelete, onClose }) {
+export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }) {
   const [d, setD] = useState(() => ({ photos: [], ...initial, plant: String(initial.plant) }));
   const [err, setErr] = useState('');
+  const [plantErr, setPlantErr] = useState('');
 
   const set = (k) => (e) => {
     const v = e.target.value;
@@ -104,6 +105,10 @@ export function JobModal({ initial, busy, onSave, onDelete, onClose }) {
 
   const save = () => {
     if (!d.issue.trim()) { setErr('กรุณากรอกปัญหาเครื่องจักรก่อนบันทึก'); return; }
+    if (+d.plant !== initial.plant || !d.id) {
+      const inPlant = jobs.filter((j) => j.plant === +d.plant && j.id !== d.id).length;
+      if (inPlant >= MAX_JOBS_PER_PLANT) { setPlantErr(`โรงไฟฟ้า ${d.plant} มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว`); return; }
+    }
     onSave({ ...d, plant: +d.plant, rank: Math.max(1, +d.rank || 1), progress: +d.progress, id: d.id || `j${Date.now()}` });
   };
 
@@ -113,9 +118,10 @@ export function JobModal({ initial, busy, onSave, onDelete, onClose }) {
     <Shell color={color} title={d.id ? 'อัปเดตงาน' : 'เพิ่มงาน P1 ใหม่'} onClose={onClose}>
       <div className="modal-grid">
         <Field label="โรงไฟฟ้า">
-          <select className="field" value={d.plant} onChange={set('plant')}>
+          <select className={`field${plantErr ? ' is-invalid' : ''}`} value={d.plant} onChange={(e) => { setPlantErr(''); set('plant')(e); }}>
             <option value="5">โรงไฟฟ้า 5</option><option value="10">โรงไฟฟ้า 10</option><option value="6">โรงไฟฟ้า 6</option><option value="11">โรงไฟฟ้า 11</option>
           </select>
+          {plantErr && <span className="field-error">{plantErr}</span>}
         </Field>
         <Field label="ลำดับความสำคัญ (1 = สำคัญสุด)">
           <input className="field" type="number" min="1" value={d.rank} onChange={set('rank')} />

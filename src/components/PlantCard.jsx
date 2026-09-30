@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Icon from '../lib/icons.jsx';
-import { DONE, DOING, STUCK } from '../lib/data.js';
+import { DONE, DOING, MAX_JOBS_PER_PLANT, STUCK } from '../lib/data.js';
 
 const R = 40;
 const C = 2 * Math.PI * R;
@@ -106,7 +106,9 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
       <div className="top5-bar">
         <span>Top 5 P1 · {p.name}</span>
         {edit && (
-          <button type="button" className="add-btn" onClick={onAddJob}><span className="ico"><Icon name="plus" /></span>เพิ่มงาน</button>
+          p.total >= MAX_JOBS_PER_PLANT
+            ? <span className="add-btn is-full" title={`แต่ละโรงมีได้ไม่เกิน ${MAX_JOBS_PER_PLANT} งาน ลบหรือแก้งานเดิมแทน`}>ครบ {MAX_JOBS_PER_PLANT} งาน</span>
+            : <button type="button" className="add-btn" onClick={onAddJob}><span className="ico"><Icon name="plus" /></span>เพิ่มงาน</button>
         )}
       </div>
 

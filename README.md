@@ -53,7 +53,7 @@ npm run build:artifact   # สร้าง dist-artifact/p1-dashboard.html (ไ�
 ### เว็บข้อมูลส่วนกลางบน Cloudflare + Neon
 
 `worker/` เป็น Cloudflare Worker ที่เปิดหน้าเว็บและ API เก็บข้อมูลใน Neon Postgres ทุกคนเห็นและแก้ข้อมูลชุดเดียวกัน
-หน้าเว็บเช็กการเปลี่ยนแปลงทุก 15 วินาที ครั้งแรกที่ใช้งานจะใส่ข้อมูลตัวอย่าง 26 งานให้
+หน้าเว็บเช็กการเปลี่ยนแปลงทุก 15 วินาที ครั้งแรกที่ใช้งานจะใส่ข้อมูลตัวอย่าง 20 งาน (โรงละ 5)ให้
 
 ตั้งค่าใน Cloudflare (Workers & Pages → Create → Import a repository):
 - Build command: `npm run build:server` · Deploy command: `npx wrangler deploy`

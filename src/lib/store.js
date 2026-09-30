@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
+import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
 import { iso, today0 } from './dates.js';
 
 /*
@@ -43,6 +43,13 @@ const snapshotFor = (jobs) => {
 };
 
 const stripPhotos = ({ photos, ...job }) => job; // eslint-disable-line no-unused-vars
+
+// Adding a job to a plant (new, or moved from another plant) must not exceed the per-plant limit.
+const assertRoom = (jobs, job) => {
+  const prev = jobs.find((j) => j.id === job.id);
+  if (prev?.plant === job.plant) return;
+  if (jobs.filter((j) => j.plant === job.plant && j.id !== job.id).length >= MAX_JOBS_PER_PLANT) throw new StoreError('plant_full');
+};
 
 /** The old single-browser data (from the local-only version of this page), if any. */
 export const readLocalBackup = () => {
@@ -140,7 +147,8 @@ function useApiStore() {
     if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
     if (!r.ok) {
       const b = await r.json().catch(() => ({}));
-      const code = { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
+      const code = String(b.error || '').startsWith('plant_full') ? 'plant_full'
+        : { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
       throw new StoreError(code, b.error, b.detail || b.error || `HTTP ${r.status}`);
     }
     await load().catch(() => {});
@@ -188,6 +196,7 @@ function useLocalStore() {
     data,
     whoUpdated: '',
     saveJob: async (job) => {
+      assertRoom(data.jobs, job);
       const exists = data.jobs.some((j) => j.id === job.id);
       commit({ ...data, jobs: exists ? data.jobs.map((j) => (j.id === job.id ? job : j)) : data.jobs.concat([job]) });
     },
@@ -292,6 +301,7 @@ function useSharedStore() {
   };
 
   const saveJob = (job) => guard(async (db) => {
+    assertRoom(partsRef.current.jobs || [], job);
     await writePhotos(db, job.id, job.photos || []);
     await call(() => db.doc(`jobs/${job.id}`).set(stripPhotos(job)));
     const others = (partsRef.current.jobs || []).filter((j) => j.id !== job.id);

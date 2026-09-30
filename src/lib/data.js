@@ -2,6 +2,8 @@ import { iso, today0 } from './dates.js';
 
 export const STORAGE_KEY = 'p1dash.v2';
 export const PLANT_IDS = [5, 10, 6, 11];
+// Jobs allowed per plant (the dashboard tracks a Top 5). Change here to raise the limit everywhere.
+export const MAX_JOBS_PER_PLANT = 5;
 
 export const DONE = 'oklch(0.62 0.16 150)';
 export const DOING = 'oklch(0.8 0.15 80)';
@@ -76,32 +78,26 @@ export const SEED = () => ({
     J(5, 3, 'ID Fan A Bearing อุณหภูมิสูง 92°C', 'ตรวจ Lube Oil + เปลี่ยน Oil Cooler', 'ประยุทธ ม.', 'เครื่องกล', '2026-09-25', '2026-10-03', 80, 'doing', 'none', ''),
     J(5, 4, 'HP Bypass Control Valve ค้าง', 'Overhaul Actuator และ Positioner', 'นภา ร.', 'C&I', '2026-09-28', '2026-10-12', 20, 'doing', 'vendor', 'ออก PO แล้ว รอผู้รับเหมาเข้าหน้างาน'),
     J(5, 5, 'Condenser Vacuum ต่ำกว่าเกณฑ์', 'Helium Leak Test หาจุดรั่ว', 'อนันต์ พ.', 'Performance', '2026-09-15', '2026-09-30', 100, 'done', 'none', ''),
-    J(5, 6, 'Service Air Compressor รั่ว', 'เปลี่ยน Gasket และ Valve', 'อนุชา ร.', 'เครื่องกล', '2026-09-10', '2026-09-18', 100, 'done', 'none', ''),
-    J(5, 7, 'Ash Handling Valve ติดขัด', 'ถอดล้างและเปลี่ยน Seat', 'สมพร ด.', 'ทีม Boiler', '2026-09-12', '2026-09-20', 100, 'done', 'none', ''),
     J(10, 1, 'Generator Transformer ค่า DGA สูงผิดปกติ', 'Oil Filtering + ทดสอบ DGA ซ้ำ', 'ธนพล จ.', 'ไฟฟ้า', '2026-09-22', '2026-10-08', 45, 'doing', 'vendor', 'รถ Filter ของผู้รับเหมาติดคิวงานโรงอื่น'),
     J(10, 2, 'Coal Mill C ลูกบดสึก', 'เปลี่ยน Grinding Roller', 'สุริยา ท.', 'เครื่องกล', '2026-10-01', '2026-10-20', 10, 'pending', 'part', 'Roller ยังไม่ถึง (Lead time 6 สัปดาห์)'),
     J(10, 3, 'DCS Controller สำรองไม่ Sync', 'Update Firmware + ทดสอบ Redundancy', 'พรทิพย์ น.', 'C&I', '2026-09-20', '2026-09-29', 70, 'doing', 'shutdown', 'ทดสอบ Switch-over ได้เฉพาะตอนหยุดเครื่อง'),
     J(10, 4, 'Cooling Water Pump 2 Seal รั่ว', 'เปลี่ยน Mechanical Seal', 'กิตติ ว.', 'เครื่องกล', '2026-09-26', '2026-10-02', 90, 'doing', 'none', ''),
     J(10, 5, 'Soot Blower 12 ติดขัด', 'ซ่อม Gearbox และ Lance', 'ชาตรี บ.', 'ทีม Boiler', '2026-09-29', '2026-10-10', 0, 'pending', 'budget', 'รออนุมัติ PR ค่าอะไหล่ Gearbox'),
-    J(10, 6, 'Conveyor Belt C3 ขาด', 'ต่อ Belt แบบ Hot Splice', 'วรวุฒิ ส.', 'เครื่องกล', '2026-09-14', '2026-09-19', 100, 'done', 'none', ''),
     J(6, 1, 'Gas Turbine Exhaust Temp Spread สูง', 'Borescope ตรวจ Combustor', 'ณัฐวุฒิ ศ.', 'GT Team', '2026-09-24', '2026-10-06', 55, 'doing', 'permit', 'รอ Permit เข้าพื้นที่อับอากาศ (Confined Space)'),
     J(6, 2, 'Circuit Breaker 6.9 kV Trip ไม่ทราบสาเหตุ', 'ทดสอบ Protection Relay และ Timing', 'อรุณ ช.', 'ไฟฟ้า', '2026-09-18', '2026-09-27', 60, 'doing', 'vendor', 'รอผู้เชี่ยวชาญ Relay จากผู้ผลิต'),
     J(6, 3, 'HRSG HP Drum Level Transmitter แกว่ง', 'เปลี่ยน Transmitter + Calibrate', 'ศิริพร ล.', 'C&I', '2026-09-27', '2026-10-01', 85, 'doing', 'none', ''),
     J(6, 4, 'Inlet Air Filter อุดตัน ΔP สูง', 'เปลี่ยน Filter Cartridge 50%', 'วีระ ด.', 'GT Team', '2026-10-01', '2026-10-07', 15, 'pending', 'part', 'Cartridge ส่งมาไม่ครบ ขาด 120 ชิ้น'),
     J(6, 5, 'Fuel Gas Filter ΔP สูง', 'เปลี่ยน Filter Element', 'มานพ ย.', 'เครื่องกล', '2026-09-20', '2026-09-28', 100, 'done', 'none', ''),
-    J(6, 6, 'Lube Oil Cooler รั่ว', 'Plug Tube + Pressure Test', 'เอกชัย พ.', 'เครื่องกล', '2026-09-08', '2026-09-15', 100, 'done', 'none', ''),
-    J(6, 7, 'Fire Protection Pump ไม่ Auto Start', 'ตรวจ Pressure Switch', 'ปรีชา ว.', 'C&I', '2026-09-11', '2026-09-16', 100, 'done', 'none', ''),
     J(11, 1, 'Steam Turbine Bearing 3 Vibration สูง', 'Balancing + ตรวจ Alignment', 'ปิยะ ห.', 'เครื่องกล', '2026-09-15', '2026-09-28', 40, 'doing', 'shutdown', 'ต้องหยุดเครื่อง ≥3 วัน ยังไม่ได้ช่วงเวลา'),
     J(11, 2, 'Economizer Tube รั่ว', 'เชื่อมซ่อม + ตรวจ NDT', 'สมศักดิ์ อ.', 'ทีม Boiler', '2026-09-26', '2026-10-04', 65, 'doing', 'manpower', 'ช่างเชื่อม Certified ไม่พอ (ได้ 2 จาก 4 คน)'),
     J(11, 3, 'Feedwater Heater 6 Level Control ผิดปกติ', 'ตรวจ Level Switch + Drain Valve', 'จิราพร ค.', 'C&I', '2026-09-23', '2026-09-29', 75, 'doing', 'part', 'รอ Valve Trim สำรองจากคลัง'),
     J(11, 4, 'Cooling Tower Fan 4 Gearbox เสียงดัง', 'เปลี่ยน Gearbox', 'บุญมี ส.', 'เครื่องกล', '2026-10-01', '2026-10-15', 0, 'pending', 'budget', 'รออนุมัติงบซื้อ Gearbox ใหม่'),
     J(11, 5, 'Battery Charger 220 VDC Alarm', 'เปลี่ยน Rectifier Module', 'ธีระ ป.', 'ไฟฟ้า', '2026-09-29', '2026-10-03', 50, 'doing', 'none', ''),
-    J(11, 6, 'Condensate Pump A Strainer อุดตัน', 'ถอดล้าง Strainer', 'ไพโรจน์ ก.', 'เครื่องกล', '2026-09-09', '2026-09-12', 100, 'done', 'none', ''),
   ],
   history: [
-    { date: '2026-09-09', done: 4, doing: 13, stuck: 9 },
-    { date: '2026-09-16', done: 6, doing: 12, stuck: 8 },
-    { date: '2026-09-23', done: 7, doing: 11, stuck: 8 },
+    { date: '2026-09-09', done: 1, doing: 11, stuck: 8 },
+    { date: '2026-09-16', done: 1, doing: 12, stuck: 7 },
+    { date: '2026-09-23', done: 2, doing: 11, stuck: 7 },
   ],
 });
 

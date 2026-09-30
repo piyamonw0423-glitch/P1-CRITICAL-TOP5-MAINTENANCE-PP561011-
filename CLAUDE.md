@@ -17,9 +17,10 @@ Full system doc, work log and roadmap: `docs/SYSTEM.md` (Thai). User-facing guid
   `npm run build` would ship the localStorage build) and sets `keep_vars: true`.
 - Secrets in the Cloudflare dashboard: `DATABASE_URL` (Neon pooled URL), `EDIT_PASSWORD`; optional `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `EDITOR_EMAILS`.
 - DB: Neon Postgres (Singapore). Worker connects via `@neondatabase/serverless` WebSocket, falls back to `pg` TCP; hard timeouts via `within()`
-  because pg timers do not fire on workerd. First connection creates the table and seeds 26 sample jobs once (`meta/seeded`).
+  because pg timers do not fire on workerd. First connection creates the table and seeds 20 sample jobs once (`meta/seeded`); older DBs get the 6 extra samples removed once (`meta/trim5`).
 
 ## Conventions
+- Max 5 jobs per plant (`MAX_JOBS_PER_PLANT` in `src/lib/data.js`), enforced in UI, all stores, server (`plant_full`) and Excel import.
 - Dates are `YYYY-MM-DD` strings; "today" is Thai time (UTC+7). Job buckets: done / stuck (pending or overdue) / doing.
 - Imports without a `photos` key must keep existing photos (all three backends honour this); `replace: true` deletes jobs not imported.
 - Error details returned to the browser must never contain the database URL (see `reason()` in worker, api.js).

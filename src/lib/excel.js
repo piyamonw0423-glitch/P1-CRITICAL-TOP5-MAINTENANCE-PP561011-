@@ -1,6 +1,6 @@
 // Excel (.xlsx) export/import for the dashboard. The exported file doubles as the template:
 // edit rows in Excel, then import it back. Libraries load on demand to keep the page small.
-import { BLOCK, PLANT_IDS, STATUS } from './data.js';
+import { BLOCK, MAX_JOBS_PER_PLANT, PLANT_IDS, STATUS } from './data.js';
 import { iso } from './dates.js';
 
 export const JOB_SHEET = 'งาน P1';
@@ -53,6 +53,7 @@ export async function buildWorkbook(data) {
     [{ value: 'วิธีใช้ไฟล์นี้', fontWeight: 'bold' }],
     ['1. แก้ไข เพิ่ม หรือลบแถวในชีต "งาน P1" (1 แถว = 1 งาน) ห้ามแก้ชื่อหัวคอลัมน์'],
     ['2. ช่องที่ต้องกรอก: โรงไฟฟ้า, ปัญหาเครื่องจักร, วันกำหนดเสร็จ · ช่องอื่นเว้นว่างได้'],
+    [`   แต่ละโรงมีได้ไม่เกิน ${MAX_JOBS_PER_PLANT} งาน`],
     ['3. งานที่มีเลข WO ตรงกับในเว็บจะถูกอัปเดต งานที่ไม่ตรงจะถูกเพิ่มใหม่ (รูปหน้างานเดิมไม่หาย)'],
     ['4. บันทึกไฟล์เป็น .xlsx แล้วในเว็บกด "อัปเดตงานประจำวัน" → "นำเข้า Excel"'],
     [''],
@@ -191,5 +192,10 @@ export function planImport(current, parsed, mode) {
     return { ...p, id: `j${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 6)}` };
   });
   const removed = mode === 'replace' ? current.jobs.filter((j) => !used.has(j.id)).length : 0;
-  return { jobs, added, updated, removed };
+  // Jobs per plant after the import; plants over the limit block the import.
+  const final = mode === 'replace' ? jobs : current.jobs.filter((j) => !used.has(j.id)).concat(jobs);
+  const perPlant = {};
+  final.forEach((j) => { perPlant[j.plant] = (perPlant[j.plant] || 0) + 1; });
+  const overflow = PLANT_IDS.filter((pid) => (perPlant[pid] || 0) > MAX_JOBS_PER_PLANT).map((pid) => ({ plant: pid, count: perPlant[pid] }));
+  return { jobs, added, updated, removed, overflow };
 }

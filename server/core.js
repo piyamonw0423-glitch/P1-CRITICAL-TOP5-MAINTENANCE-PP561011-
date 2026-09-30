@@ -1,7 +1,7 @@
 // Shared data logic for the Cloudflare Worker (worker/) and the Node server (server/index.js).
 // Postgres holds one table of JSON documents keyed by (collection, id): jobs, photos (kept apart
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
-import { PLANT_IDS, SEED, counts } from '../src/lib/data.js';
+import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
 import { iso } from '../src/lib/dates.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
@@ -20,6 +20,14 @@ const bangkokToday = () => {
 const newId = (p) => `${p}${crypto.randomUUID()}`;
 
 const bad = (msg) => Object.assign(new Error(msg), { status: 400, expose: true });
+
+// Sample jobs removed when the dashboard was limited to 5 jobs per plant; deleted once from
+// databases seeded earlier, and only while they still carry the sample WO number and text.
+const TRIMMED_SAMPLES = [
+  ['WO-P5-006', 'Service Air Compressor รั่ว'], ['WO-P5-007', 'Ash Handling Valve ติดขัด'],
+  ['WO-P10-006', 'Conveyor Belt C3 ขาด'], ['WO-P6-006', 'Lube Oil Cooler รั่ว'],
+  ['WO-P6-007', 'Fire Protection Pump ไม่ Auto Start'], ['WO-P11-006', 'Condensate Pump A Strainer อุดตัน'],
+];
 const str = (v, max = 500) => String(v ?? '').slice(0, max);
 
 function cleanJob(id, b) {
@@ -87,6 +95,13 @@ export function createDb(conn) {
     await put(c, 'meta', 'app', { updatedAt: new Date().toISOString(), ...(by ? { updatedBy: by } : {}) });
   };
 
+  // Reject when a plant would end up with more than MAX_JOBS_PER_PLANT jobs (only `plants` if given).
+  const checkLimit = async (c, plants = null) => {
+    const r = await c.query("SELECT data->>'plant' AS plant, count(*)::int AS n FROM docs WHERE collection = 'jobs' GROUP BY 1");
+    const full = r.rows.find((x) => x.n > MAX_JOBS_PER_PLANT && (!plants || plants.includes(Number(x.plant))));
+    if (full) throw bad(`plant_full:${full.plant}`);
+  };
+
   const writeJob = async (c, job, photos) => {
     if (photos === null) { await put(c, 'jobs', job.id, job); return; }
     const existing = await c.query("SELECT id FROM docs WHERE collection = 'photos' AND data->>'jobId' = $1", [job.id]);
@@ -110,6 +125,20 @@ export function createDb(conn) {
         for (const [pid, v] of Object.entries(d.plants)) await put(c, 'plants', pid, { impact: v.impact });
         for (const h of d.history) await put(c, 'history', h.date, h);
         await put(c, 'meta', 'seeded', { at: new Date().toISOString() });
+        await put(c, 'meta', 'trim5', { at: new Date().toISOString() });
+        await stamp(c);
+      });
+      await tx(async (c) => {
+        const done = await c.query("SELECT 1 FROM docs WHERE collection = 'meta' AND id = 'trim5'");
+        if (done.rowCount) return;
+        for (const [wo, issue] of TRIMMED_SAMPLES) {
+          const r = await c.query("SELECT id FROM docs WHERE collection = 'jobs' AND data->>'wo' = $1 AND data->>'issue' = $2", [wo, issue]);
+          for (const { id } of r.rows) {
+            await c.query("DELETE FROM docs WHERE collection = 'photos' AND data->>'jobId' = $1", [id]);
+            await del(c, 'jobs', id);
+          }
+        }
+        await put(c, 'meta', 'trim5', { at: new Date().toISOString() });
         await stamp(c);
       });
     },
@@ -153,7 +182,13 @@ export function createDb(conn) {
 
     saveJob(id, body, by) {
       const { job, photos } = cleanJob(id, body);
-      return tx(async (c) => { await writeJob(c, job, photos); await stamp(c, by); });
+      return tx(async (c) => {
+        const prev = await c.query("SELECT (data->>'plant')::int AS plant FROM docs WHERE collection = 'jobs' AND id = $1", [job.id]);
+        await writeJob(c, job, photos);
+        // Only adding a job to a plant (new, or moved from another plant) can exceed the limit.
+        if (prev.rows[0]?.plant !== job.plant) await checkLimit(c, [job.plant]);
+        await stamp(c, by);
+      });
     },
 
     deleteJob(id, by) {
@@ -184,6 +219,7 @@ export function createDb(conn) {
           await c.query("DELETE FROM docs WHERE collection = 'photos' AND NOT (data->>'jobId' = ANY($1::text[]))", [keep]);
           await c.query("DELETE FROM docs WHERE collection = 'jobs' AND NOT (id = ANY($1::text[]))", [keep]);
         }
+        await checkLimit(c);
         for (const [pid, v] of Object.entries(d.plants || {})) {
           if (PLANT_IDS.includes(Number(pid)) && Array.isArray(v?.impact)) await put(c, 'plants', String(pid), { impact: v.impact.map((s) => str(s)) });
         }
