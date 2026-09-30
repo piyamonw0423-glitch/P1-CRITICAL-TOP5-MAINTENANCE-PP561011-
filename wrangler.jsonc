@@ -9,6 +9,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "p1-critical-top5-maintenance-pp561011",
   "main": "worker/index.js",
+  // Always build the shared-data (API) version of the site before deploying, whatever
+  // build command the Cloudflare dashboard has; the plain build would keep data per browser.
+  "build": { "command": "npm run build:server" },
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   // Serve on <name>.<account>.workers.dev; no per-version preview URLs (they would skip Access).

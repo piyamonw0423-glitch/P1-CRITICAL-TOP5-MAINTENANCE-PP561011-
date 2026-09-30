@@ -26,7 +26,7 @@ const ERROR_TEXT = {
   wrong_key: 'รหัสผ่านทีมไม่ถูกต้องหรือถูกเปลี่ยนแล้ว กดอัปเดตงานประจำวันแล้วใส่รหัสใหม่',
   read_only: 'บัญชีนี้ดูได้อย่างเดียว ขอสิทธิ์แก้ไขจากผู้ดูแลแดชบอร์ด',
 };
-const errorText = (e) => ERROR_TEXT[e?.code] || 'บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่';
+const errorText = (e) => ERROR_TEXT[e?.code] || `บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่${e?.detail ? ` (${e.detail})` : ''}`;
 
 export default function App() {
   const store = useDashboardStore();
@@ -41,6 +41,15 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [backup] = useState(readLocalBackup);
   const [askKey, setAskKey] = useState(false);
+  const [flashId, setFlashId] = useState(null);
+
+  // After saving, briefly highlight the job and bring it into view so the change is easy to spot.
+  useEffect(() => {
+    if (!flashId) return undefined;
+    const raf = requestAnimationFrame(() => document.getElementById(`job-${flashId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    const t = setTimeout(() => setFlashId(null), 3000);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+  }, [flashId]);
   const clearToast = useCallback(() => setToast(null), []);
   const closeAsk = useCallback(() => setAsk(null), []);
 
@@ -222,6 +231,7 @@ export default function App() {
                         key={p.id}
                         p={p}
                         edit={editMode}
+                        flashId={flashId}
                         onEditJob={(job) => setModal({ type: 'job', job })}
                         onAddJob={() => openNew(p.id)}
                         onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
@@ -250,7 +260,10 @@ export default function App() {
         <JobModal
           initial={modal.job}
           busy={busy}
-          onSave={(job) => run(() => store.saveJob(job), 'บันทึกแล้ว')}
+          onSave={async (job) => {
+            await run(() => store.saveJob(job), job.status === 'done' ? 'บันทึกแล้ว · งานที่เสร็จแล้วย้ายไปอยู่ท้ายรายการของโรง' : 'บันทึกแล้ว');
+            setFlashId(job.id);
+          }}
           onDelete={() => deleteJob(modal.job.id)}
           onClose={() => setModal(null)}
         />

@@ -22,7 +22,7 @@ export const BACKEND = typeof __BACKEND__ !== 'undefined' ? __BACKEND__ : 'local
 const newId = (p) => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 export class StoreError extends Error {
-  constructor(code, message) { super(message || code); this.code = code; }
+  constructor(code, message, detail) { super(message || code); this.code = code; this.detail = detail; }
 }
 
 // Retry once on a transient `unavailable`, as the db contract recommends.
@@ -132,8 +132,9 @@ function useApiStore() {
     const r = await request(method, url, body);
     if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
     if (!r.ok) {
+      const b = await r.json().catch(() => ({}));
       const code = { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
-      throw new StoreError(code);
+      throw new StoreError(code, b.error, b.detail || b.error || `HTTP ${r.status}`);
     }
     await load().catch(() => {});
   };

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { DONE, DOING, STUCK } from '../lib/data.js';
 
@@ -26,10 +27,10 @@ const clickable = (edit, fn) =>
     ? { role: 'button', tabIndex: 0, onClick: fn, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } } }
     : {};
 
-function JobRow({ row, edit, onEdit, onPhoto }) {
+function JobRow({ row, edit, flash, onEdit, onPhoto }) {
   const { job } = row;
   return (
-    <div className={`job${edit ? ' is-editable' : ''}`} {...clickable(edit, onEdit)}>
+    <div id={`job-${job.id}`} className={`job${edit ? ' is-editable' : ''}${flash ? ' is-flash' : ''}`} {...clickable(edit, onEdit)}>
       <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
       <div className="job-main">
         <div className="job-top">
@@ -75,7 +76,11 @@ function JobRow({ row, edit, onEdit, onPhoto }) {
   );
 }
 
-export default function PlantCard({ p, edit, onEditJob, onAddJob, onEditImpact, onPhoto }) {
+export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEditImpact, onPhoto }) {
+  // Top 5 by default; "ดูทั้งหมด" (and edit mode) lists every job so none drop out of sight.
+  const [expanded, setExpanded] = useState(false);
+  const showAll = edit || expanded || p.rest.some((r) => r.job.id === flashId);
+  const rows = showAll ? p.top.concat(p.rest) : p.top;
   return (
     <article className="plant" style={{ '--pc': p.color, '--pt': p.tint, '--pd': p.dark }}>
       <div className="plant-head">
@@ -106,10 +111,17 @@ export default function PlantCard({ p, edit, onEditJob, onAddJob, onEditImpact, 
       </div>
 
       <div className="jobs">
-        {p.top.map((row) => (
-          <JobRow key={row.job.id} row={row} edit={edit} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
+        {rows.map((row, i) => (
+          <div key={row.job.id}>
+            {i === 5 && <div className="jobs-divider">งานอื่นๆ นอก Top 5</div>}
+            <JobRow row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
+          </div>
         ))}
-        {p.more > 0 && <div className="jobs-more">+ อีก {p.more} งาน ({p.moreDone} งานเสร็จแล้ว)</div>}
+        {p.more > 0 && !edit && (
+          <button type="button" className="jobs-more" onClick={() => setExpanded((v) => !v)} aria-expanded={showAll}>
+            {showAll ? 'ย่อเหลือ Top 5' : `+ ดูอีก ${p.more} งาน (${p.moreDone} งานเสร็จแล้ว)`}
+          </button>
+        )}
       </div>
     </article>
   );

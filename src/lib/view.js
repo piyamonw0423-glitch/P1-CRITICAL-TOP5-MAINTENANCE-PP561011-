@@ -47,6 +47,7 @@ export function plantView(data, pid, t) {
     pct: pctOf(c.done, all.length),
     impact: data.plants[pid]?.impact || [],
     top: sorted.slice(0, 5).map((j, i) => jobRow(j, i, pid, t)),
+    rest: rest.map((j, i) => jobRow(j, i + 5, pid, t)),
     more: rest.length,
     moreDone: rest.filter((j) => j.status === 'done').length,
   };

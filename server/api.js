@@ -59,6 +59,6 @@ export async function handleApi(db, { method, path, body, perm }) {
   } catch (e) {
     if (e.status && e.expose) return fail(e.status, e.message);
     console.error(e);
-    return fail(500, 'server_error');
+    return { status: 500, json: { error: 'server_error', detail: String(e?.message || e).replace(/postgres(ql)?:\/\/\S+/gi, '[url]').slice(0, 160) } };
   }
 }
