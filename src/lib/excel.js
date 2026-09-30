@@ -113,6 +113,7 @@ export async function parseWorkbook(file) {
   const jobs = [];
   const errors = [];
   const nextRank = {};
+  const woRow = new Map(); // normalized WO -> first Excel row, to catch the same WO twice
   rows.slice(headerAt + 1).forEach((r, k) => {
     const row = headerAt + k + 2; // 1-based Excel row number
     const get = (f) => (idx[f] == null ? null : r[idx[f]]);
@@ -142,6 +143,10 @@ export async function parseWorkbook(file) {
     const bl = text(get('blocker'));
     const blocker = BLOCK_BY_LABEL[bl] || (BLOCK[bl] ? bl : bl ? null : 'none');
     if (!blocker) problems.push(`ติดปัญหา "${bl}" ไม่รู้จัก`);
+
+    const woKey = text(get('wo')).replace(/\s+/g, '').toUpperCase();
+    if (woKey && woRow.has(woKey)) problems.push(`เลข WO "${text(get('wo'))}" ซ้ำกับแถว ${woRow.get(woKey)}`);
+    else if (woKey) woRow.set(woKey, row);
 
     if (problems.length) { errors.push({ row, msg: problems.join(' · ') }); return; }
     nextRank[plant] = (nextRank[plant] || 0) + 1;

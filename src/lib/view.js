@@ -36,8 +36,11 @@ function jobRow(j, i, pid, t) {
 export function plantView(data, pid, t) {
   const all = data.jobs.filter((j) => j.plant === pid);
   const c = counts(all, t);
-  const sorted = [...all].sort((a, b) => (a.status === 'done') - (b.status === 'done') || a.rank - b.rank);
-  const rest = sorted.slice(5);
+  // Shown: up to 5 unfinished jobs by rank. Collapsed behind a toggle: finished jobs and any extra open ones.
+  const byRank = (a, b) => a.rank - b.rank;
+  const open = all.filter((j) => j.status !== 'done').sort(byRank);
+  const top = open.slice(0, 5);
+  const rest = open.slice(5).concat(all.filter((j) => j.status === 'done').sort(byRank));
   return {
     id: pid,
     name: `โรงไฟฟ้า ${pid}`,
@@ -46,8 +49,8 @@ export function plantView(data, pid, t) {
     ...c,
     pct: pctOf(c.done, all.length),
     impact: data.plants[pid]?.impact || [],
-    top: sorted.slice(0, 5).map((j, i) => jobRow(j, i, pid, t)),
-    rest: rest.map((j, i) => jobRow(j, i + 5, pid, t)),
+    top: top.map((j, i) => jobRow(j, i, pid, t)),
+    rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t)),
     more: rest.length,
     moreDone: rest.filter((j) => j.status === 'done').length,
   };

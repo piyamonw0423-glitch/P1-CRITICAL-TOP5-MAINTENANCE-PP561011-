@@ -77,10 +77,10 @@ function JobRow({ row, edit, flash, onEdit, onPhoto }) {
 }
 
 export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEditImpact, onPhoto }) {
-  // Top 5 by default; "ดูทั้งหมด" (and edit mode) lists every job so none drop out of sight.
+  // Unfinished Top 5 always shown; finished/other jobs fold behind a chevron (opened for a just-saved job).
   const [expanded, setExpanded] = useState(false);
-  const showAll = edit || expanded || p.rest.some((r) => r.job.id === flashId);
-  const rows = showAll ? p.top.concat(p.rest) : p.top;
+  const showRest = expanded || p.rest.some((r) => r.job.id === flashId);
+  const restLabel = [p.moreDone && `เสร็จแล้ว ${p.moreDone} งาน`, p.more - p.moreDone && `งานอื่น ${p.more - p.moreDone} งาน`].filter(Boolean).join(' · ');
   return (
     <article className="plant" style={{ '--pc': p.color, '--pt': p.tint, '--pd': p.dark }}>
       <div className="plant-head">
@@ -113,16 +113,31 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
       </div>
 
       <div className="jobs">
-        {rows.map((row, i) => (
-          <div key={row.job.id}>
-            {i === 5 && <div className="jobs-divider">งานอื่นๆ นอก Top 5</div>}
-            <JobRow row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
-          </div>
+        {p.top.length === 0 && <div className="jobs-empty">ไม่มีงานค้าง 🎉</div>}
+        {p.top.map((row) => (
+          <JobRow key={row.job.id} row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
         ))}
-        {p.more > 0 && !edit && (
-          <button type="button" className="jobs-more" onClick={() => setExpanded((v) => !v)} aria-expanded={showAll}>
-            {showAll ? 'ย่อเหลือ Top 5' : `+ ดูอีก ${p.more} งาน (${p.moreDone} งานเสร็จแล้ว)`}
-          </button>
+        {p.more > 0 && (
+          <>
+            <button
+              type="button"
+              className={`jobs-toggle${showRest ? ' is-open' : ''}`}
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={showRest}
+              aria-controls={`rest-${p.id}`}
+            >
+              <span className="jobs-toggle-chev"><Icon name="chevron" /></span>
+              {restLabel}
+              <span className="jobs-toggle-hint">{showRest ? 'ซ่อน' : 'กดเพื่อดู'}</span>
+            </button>
+            {showRest && (
+              <div id={`rest-${p.id}`} className="jobs-rest">
+                {p.rest.map((row) => (
+                  <JobRow key={row.job.id} row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </article>

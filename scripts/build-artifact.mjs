@@ -8,7 +8,7 @@ const css = readFileSync('dist-artifact/app.css', 'utf8');
 const js = readFileSync('dist-artifact/app.js', 'utf8').replace(/<\/script/gi, '<\\/script');
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs';
 
-const html = `<title>P1 Repair Dashboard</title>
+const html = `<title>TOP5 Maintenance Dashboard PP561011</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Anuphan:wght@400;500;600;700&display=swap">
 <style>
 ${css}

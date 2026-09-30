@@ -1,4 +1,4 @@
-# P1 Repair Dashboard
+# TOP5 Maintenance Dashboard PP561011
 
 แดชบอร์ดติดตามงานซ่อมเร่งด่วน (Priority 1) Top 5 ของโรงไฟฟ้า 5, 10, 6 และ 11 ในหน้าเดียว
 สำหรับผู้บริหารและทีมงาน — สร้างจากงานออกแบบ "P1 Repair Dashboard v2" (Claude Design, ดู `project/` และ `chats/`)
