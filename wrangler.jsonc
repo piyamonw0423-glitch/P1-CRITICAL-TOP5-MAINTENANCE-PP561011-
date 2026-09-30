@@ -17,6 +17,8 @@
   // Serve on <name>.<account>.workers.dev; no per-version preview URLs (they would skip Access).
   "workers_dev": true,
   "preview_urls": false,
+  // Keep variables added in the Cloudflare dashboard across deploys (secrets are always kept).
+  "keep_vars": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
