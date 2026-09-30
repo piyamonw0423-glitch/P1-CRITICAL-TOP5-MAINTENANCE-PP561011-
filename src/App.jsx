@@ -10,6 +10,8 @@ import { FILTERS } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
 import { readLocalBackup, useDashboardStore } from './lib/store.js';
+import { buildWorkbook, parseWorkbook } from './lib/excel.js';
+import ExcelImportDialog from './components/ExcelImport.jsx';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -41,6 +43,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [backup] = useState(readLocalBackup);
   const [askKey, setAskKey] = useState(false);
+  const [excel, setExcel] = useState(null); // { fileName, parsed } while previewing an Excel import
   const [flashId, setFlashId] = useState(null);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -130,12 +133,15 @@ export default function App() {
       setToast({ text: 'โหลดรูปบางรูปไม่สำเร็จ ไฟล์ที่ส่งออกจะไม่มีรูป', error: true });
       full = { ...data, jobs: data.jobs.map((j) => ({ ...j, photos: (j.photos || []).filter((ph) => ph.src.startsWith('data:')) })) };
     }
-    const json = JSON.stringify(full, null, 2);
-    // Inside a claude.ai artifact, downloads go through the viewer's save prompt.
+    await saveFile(filename, new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' }));
+  };
+
+  // Hand a generated file to the viewer. Inside a claude.ai artifact, downloads go through its save prompt.
+  const saveFile = async (filename, blob) => {
     const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
     if (downloads) {
       try {
-        await downloads.save({ filename, data: json });
+        await downloads.save({ filename, data: blob });
         setToast({ text: `ส่งออกไฟล์ ${filename} แล้ว` });
       } catch (e) {
         if (e?.code !== 'declined') setToast({ text: 'ส่งออกไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง', error: true });
@@ -143,16 +149,36 @@ export default function App() {
       return;
     }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.href = URL.createObjectURL(blob);
     a.download = filename;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
+  const exportExcel = async () => {
+    try {
+      await saveFile(`P1-dashboard-${iso(t)}.xlsx`, await buildWorkbook(data));
+    } catch {
+      setToast({ text: 'สร้างไฟล์ Excel ไม่สำเร็จ ลองใหม่อีกครั้ง', error: true });
+    }
+  };
+
   const importParsed = (d) => run(() => store.importData(d), `นำเข้า ${d.jobs.length} งานแล้ว`);
 
-  const importFile = (f) =>
-    f.text().then((txt) => {
+  const importFile = async (f) => {
+    if (/\.xlsx$/i.test(f.name)) {
+      try {
+        setExcel({ fileName: f.name, parsed: await parseWorkbook(f) });
+      } catch (e) {
+        setToast({ text: `อ่านไฟล์ Excel ไม่ได้: ${e?.message || 'รูปแบบไฟล์ไม่ถูกต้อง'}`, error: true });
+      }
+      return;
+    }
+    if (/\.xls$/i.test(f.name)) {
+      setToast({ text: 'รองรับเฉพาะ .xlsx — ใน Excel ให้ "บันทึกเป็น" Excel Workbook (.xlsx) ก่อน', error: true });
+      return;
+    }
+    return f.text().then((txt) => {
       let d;
       try {
         d = JSON.parse(txt);
@@ -167,6 +193,7 @@ export default function App() {
         onConfirm: () => importParsed(d),
       });
     });
+  };
 
   const resetData = store.resetSample
     ? () => setAsk({
@@ -194,7 +221,7 @@ export default function App() {
           else setEditMode((v) => !v);
         }}
       />
-      {editMode && <EditBar shared={store.shared} onExport={exportData} onImportFile={importFile} onReset={resetData} />}
+      {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onReset={resetData} />}
 
       <main className="main">
         {status === 'connecting' && (
@@ -290,6 +317,18 @@ export default function App() {
       )}
       {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
       {ask && <ConfirmDialog {...ask} busy={busy} onCancel={closeAsk} />}
+      {excel && (
+        <ExcelImportDialog
+          {...excel}
+          current={data}
+          busy={busy}
+          onCancel={() => setExcel(null)}
+          onConfirm={async (d, plan) => {
+            await run(() => store.importData(d), `นำเข้าจาก Excel แล้ว · เพิ่ม ${plan.added} · อัปเดต ${plan.updated}${d.replace ? ` · ลบ ${plan.removed}` : ''}`);
+            setExcel(null);
+          }}
+        />
+      )}
       {askKey && (
         <PasswordDialog
           onCancel={() => setAskKey(false)}

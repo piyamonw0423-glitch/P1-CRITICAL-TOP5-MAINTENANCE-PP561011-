@@ -280,3 +280,17 @@ button.jobs-more:hover { text-decoration: underline; }
 @keyframes job-flash { from { background: oklch(0.93 0.1 95); } to { background: transparent; } }
 .job.is-flash { animation: job-flash 2.5s ease-out; }
 @media (prefers-reduced-motion: reduce) { .job.is-flash { animation: none; background: oklch(0.96 0.06 95); } }
+
+/* ---------- Excel import preview ---------- */
+.import-body { gap: 12px; }
+.import-file { margin: 0; font-weight: 700; word-break: break-all; }
+.import-stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14.5px; }
+.is-bad { color: var(--stuck-ink); }
+.import-errors { border-radius: 14px; background: oklch(0.97 0.02 25); padding: 10px 14px; }
+.import-errors ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; max-height: 180px; overflow: auto; }
+.import-mode { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.import-mode label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 14px; border: 2px solid var(--line); cursor: pointer; font-size: 14px; line-height: 1.5; }
+.import-mode label.is-on { border-color: oklch(0.52 0.17 255); background: oklch(0.97 0.02 255); }
+.import-mode label.is-on.is-danger { border-color: var(--stuck); background: oklch(0.97 0.02 25); }
+.import-mode input { margin-top: 4px; accent-color: oklch(0.52 0.17 255); }
+.import-summary { font-size: 14.5px; padding: 10px 14px; border-radius: 14px; background: var(--hover); }

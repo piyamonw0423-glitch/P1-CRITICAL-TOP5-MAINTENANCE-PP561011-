@@ -29,8 +29,9 @@ function cleanJob(id, b) {
   if (!PLANT_IDS.includes(plant)) throw bad('invalid plant');
   if (!str(b.issue).trim()) throw bad('issue is required');
   if (!DATE_RE.test(b.start) || !DATE_RE.test(b.end)) throw bad('invalid dates');
-  const photos = Array.isArray(b.photos) ? b.photos.slice(0, MAX_PHOTOS) : [];
-  for (const ph of photos) {
+  // No `photos` key (e.g. an Excel import) means "leave this job's photos as they are".
+  const photos = Array.isArray(b.photos) ? b.photos.slice(0, MAX_PHOTOS) : null;
+  for (const ph of photos || []) {
     if (ph.id && !ID_RE.test(ph.id)) throw bad('invalid photo id');
     if (!ph.id && !(typeof ph.src === 'string' && ph.src.startsWith('data:image/') && ph.src.length <= MAX_PHOTO_CHARS)) throw bad('invalid photo');
     if (!DATE_RE.test(ph.date)) throw bad('invalid photo date');
@@ -87,6 +88,7 @@ export function createDb(conn) {
   };
 
   const writeJob = async (c, job, photos) => {
+    if (photos === null) { await put(c, 'jobs', job.id, job); return; }
     const existing = await c.query("SELECT id FROM docs WHERE collection = 'photos' AND data->>'jobId' = $1", [job.id]);
     const keep = new Set(photos.filter((ph) => ph.id).map((ph) => ph.id));
     for (const r of existing.rows) if (!keep.has(r.id)) await del(c, 'photos', r.id);
@@ -173,10 +175,15 @@ export function createDb(conn) {
       if (!d || !Array.isArray(d.jobs)) throw bad('file must contain jobs');
       const cleaned = d.jobs.map((j) => {
         const id = String(j.id || newId('j')).replace(/[^\w\-.~:@+]/g, '_').slice(0, 100);
-        return cleanJob(id, { ...j, photos: (j.photos || []).map(({ src, date }) => ({ src, date })) });
+        return cleanJob(id, { ...j, photos: Array.isArray(j.photos) ? j.photos.map(({ src, date }) => ({ src, date })) : undefined });
       });
       return tx(async (c) => {
         for (const { job, photos } of cleaned) await writeJob(c, job, photos);
+        if (d.replace) { // remove jobs (and their photos) that are not in the imported set
+          const keep = cleaned.map((x) => x.job.id);
+          await c.query("DELETE FROM docs WHERE collection = 'photos' AND NOT (data->>'jobId' = ANY($1::text[]))", [keep]);
+          await c.query("DELETE FROM docs WHERE collection = 'jobs' AND NOT (id = ANY($1::text[]))", [keep]);
+        }
         for (const [pid, v] of Object.entries(d.plants || {})) {
           if (PLANT_IDS.includes(Number(pid)) && Array.isArray(v?.impact)) await put(c, 'plants', String(pid), { impact: v.impact.map((s) => str(s)) });
         }

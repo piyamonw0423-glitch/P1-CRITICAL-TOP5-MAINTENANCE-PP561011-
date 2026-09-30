@@ -35,7 +35,7 @@ export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly,
   );
 }
 
-export function EditBar({ shared, onExport, onImportFile, onReset }) {
+export function EditBar({ shared, onExportExcel, onExport, onImportFile, onReset }) {
   const fileRef = useRef(null);
   return (
     <div className="edit-bar">
@@ -44,13 +44,14 @@ export function EditBar({ shared, onExport, onImportFile, onReset }) {
         {shared ? 'กดบันทึกแล้วทุกคนที่เปิดลิงก์นี้จะเห็นทันที' : 'ข้อมูลบันทึกในเครื่องนี้อัตโนมัติ'}
       </span>
       <div className="edit-bar-actions">
-        <button type="button" className="pill-btn" onClick={onExport}><span className="ico"><Icon name="download" /></span>{shared ? 'ส่งออกไฟล์ (สำรองข้อมูล)' : 'ส่งออกไฟล์ (แชร์ทีม)'}</button>
-        <button type="button" className="pill-btn" onClick={() => fileRef.current?.click()}><span className="ico"><Icon name="upload" /></span>นำเข้าไฟล์</button>
+        <button type="button" className="pill-btn" onClick={onExportExcel} title="ใช้เป็นแม่แบบกรอกข้อมูลได้"><span className="ico"><Icon name="download" /></span>ส่งออก Excel</button>
+        <button type="button" className="pill-btn" onClick={() => fileRef.current?.click()} title="ไฟล์ Excel (.xlsx) หรือไฟล์สำรอง (.json)"><span className="ico"><Icon name="upload" /></span>นำเข้า Excel</button>
+        <button type="button" className="pill-btn" onClick={onExport} title="รวมรูปหน้างาน ใช้กู้คืนข้อมูลทั้งหมด"><span className="ico"><Icon name="download" /></span>{shared ? 'สำรองข้อมูล (.json)' : 'ส่งออกไฟล์ (แชร์ทีม)'}</button>
         {onReset && <button type="button" className="pill-btn is-danger" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button>}
         <input
           ref={fileRef}
           type="file"
-          accept=".json,application/json"
+          accept=".xlsx,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           hidden
           onChange={(e) => {
             const f = e.target.files[0];

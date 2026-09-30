@@ -193,7 +193,19 @@ function useLocalStore() {
     },
     deleteJob: async (id) => commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }),
     saveImpact: async (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } }),
-    importData: async (d) => commit({ plants: {}, history: [], ...d }),
+    // Upsert by id (d.replace: only d.jobs remain). Jobs without `photos` keep their current photos.
+    importData: async (d) => {
+      const old = new Map(data.jobs.map((j) => [j.id, j]));
+      const withPhotos = (j) => (Array.isArray(j.photos) ? j : { ...j, photos: old.get(j.id)?.photos || [] });
+      const incoming = new Map(d.jobs.map((j) => [j.id, withPhotos(j)]));
+      const jobs = d.replace
+        ? [...incoming.values()]
+        : data.jobs.map((j) => incoming.get(j.id) || j).concat([...incoming.values()].filter((j) => !old.has(j.id)));
+      const history = d.history
+        ? data.history.filter((h) => !d.history.some((x) => x.date === h.date)).concat(d.history)
+        : data.history;
+      commit({ ...data, jobs, plants: { ...data.plants, ...(d.plants || {}) }, history });
+    },
     resetSample: async () => commit(SEED()),
   };
 }
@@ -298,15 +310,25 @@ function useSharedStore() {
   });
 
   // Adds/overwrites every job, plant and history entry from an exported file (or the old local data).
+  // Jobs without a `photos` key keep their photos; d.replace removes jobs missing from d.jobs.
   const importData = (d) => guard(async (db) => {
+    const ids = new Set();
     for (const job of d.jobs) {
       const j = { ...job, id: String(job.id || newId('j')).replace(/[^\w\-.~:@+]/g, '_') };
-      await writePhotos(db, j.id, (j.photos || []).map(({ src, date }) => ({ src, date })));
+      ids.add(j.id);
+      if (Array.isArray(j.photos)) await writePhotos(db, j.id, j.photos.map(({ src, date }) => ({ src, date })));
       await call(() => db.doc(`jobs/${j.id}`).set(stripPhotos(j)));
+    }
+    if (d.replace) {
+      for (const j of partsRef.current.jobs || []) {
+        if (ids.has(j.id)) continue;
+        for (const ph of partsRef.current.photos.filter((p) => p.jobId === j.id)) await call(() => db.doc(`photos/${ph.id}`).delete());
+        await call(() => db.doc(`jobs/${j.id}`).delete());
+      }
     }
     for (const [pid, v] of Object.entries(d.plants || {})) await call(() => db.doc(`plants/${pid}`).set({ impact: v.impact || [] }));
     for (const h of d.history || []) if (h?.date) await call(() => db.doc(`history/${h.date}`).set(h));
-    const byId = new Map((partsRef.current.jobs || []).map((j) => [j.id, j]));
+    const byId = new Map(d.replace ? [] : (partsRef.current.jobs || []).map((j) => [j.id, j]));
     d.jobs.forEach((j) => byId.set(j.id, j));
     await stamp(db, [...byId.values()]);
   });
