@@ -38,9 +38,25 @@ npm run build:artifact   # สร้าง dist-artifact/p1-dashboard.html (ไ�
 เวอร์ชัน Artifact ใช้ฐานข้อมูลกลางของหน้า (capability `db`) ทุกคนที่มีสิทธิ์แก้ไขเห็นและบันทึกข้อมูลชุดเดียวกันแบบเรียลไทม์
 (ดูโครงสร้างข้อมูลใน `src/lib/store.js`) ส่วนเว็บปกติ (`npm run build`) ยังเก็บข้อมูลใน localStorage ของแต่ละเครื่อง
 
+### เว็บข้อมูลส่วนกลางบน Render + Supabase
+
+`server/` เป็นเซิร์ฟเวอร์ Node.js (Express) ที่เปิดหน้าเว็บและ API เก็บข้อมูลใน Postgres (Supabase)
+ทุกคนที่เปิดเว็บเห็นและแก้ข้อมูลชุดเดียวกัน การเปลี่ยนแปลงส่งถึงทุกหน้าที่เปิดอยู่ทันที (Server-Sent Events)
+ครั้งแรกที่เซิร์ฟเวอร์เริ่มทำงาน จะใส่ข้อมูลตัวอย่าง 26 งานให้
+
+```bash
+npm run build:server                                  # build หน้าเว็บโหมด API
+DATABASE_URL=postgres://... npm start                 # รันเซิร์ฟเวอร์ (พอร์ต 3000)
+```
+
+Deploy: Render → New → Blueprint → เลือก repo นี้ (`render.yaml`) → ใส่ `DATABASE_URL`
+เป็น connection string แบบ **Session pooler** จาก Supabase (Connect → Session pooler)
+
 ## โครงสร้าง
 
 - `src/lib/data.js` — ข้อมูลตั้งต้น, สีประจำโรง/สถานะ/ปัญหา, การบันทึก
 - `src/lib/view.js` — คำนวณตัวเลข, Top 5, Highlights, แนวโน้ม
+- `src/lib/store.js` — ที่เก็บข้อมูล 3 แบบ: localStorage / ฐานข้อมูล claude.ai / เซิร์ฟเวอร์ API
+- `server/` — เซิร์ฟเวอร์ Express + Postgres สำหรับ Render
 - `src/components/` — Header, Summary, PlantCard, Insights, Modals
 - `src/styles.css` — สไตล์ทั้งหมด (ค่าสีตามงานออกแบบ)

@@ -4,18 +4,19 @@ import { iso, today0 } from './dates.js';
 
 /*
  * Data layer. Two backends behind one hook:
- *  - shared: the claude.ai artifact `db` capability (artifact build, __SHARED__ = true).
+ *  - shared: the claude.ai artifact `db` capability (artifact build, __BACKEND__ = 'artifact').
  *    Everyone with edit access reads and writes the same records, live.
  *      jobs/<jobId>      one job (without photos)
  *      photos/<photoId>  { jobId, src, date } — kept apart to stay under the 256 KiB doc limit
  *      plants/<plantId>  { impact: string[] }
  *      history/<date>    { date, done, doing, stuck, p } — one snapshot per day for the trend
  *      meta/app          { updatedAt, updatedBy }
+ *  - api: the Node server in server/ (Render build, `npm run build:server`), Postgres behind it.
  *  - local: browser localStorage (plain website build), seeded with sample data.
  */
 
 // eslint-disable-next-line no-undef
-export const SHARED = typeof __SHARED__ !== 'undefined' && __SHARED__;
+export const BACKEND = typeof __BACKEND__ !== 'undefined' ? __BACKEND__ : 'local';
 
 const newId = (p) => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
@@ -52,8 +53,61 @@ export const readLocalBackup = () => {
   }
 };
 
+// BACKEND is a build-time constant, so the same hook is used on every render.
 export function useDashboardStore() {
-  return SHARED ? useSharedStore() : useLocalStore(); // eslint-disable-line react-hooks/rules-of-hooks
+  /* eslint-disable react-hooks/rules-of-hooks */
+  if (BACKEND === 'artifact') return useSharedStore();
+  if (BACKEND === 'api') return useApiStore();
+  return useLocalStore();
+  /* eslint-enable react-hooks/rules-of-hooks */
+}
+
+/* ---------------- api (Node server + Postgres) ---------------- */
+
+function useApiStore() {
+  const [status, setStatus] = useState('connecting');
+  const [data, setData] = useState({ jobs: [], plants: {}, history: [], updatedAt: null });
+
+  const load = useCallback(async () => {
+    const r = await fetch('api/state', { cache: 'no-store' });
+    if (!r.ok) throw new StoreError('unavailable');
+    setData(await r.json());
+    setStatus('ready');
+  }, []);
+
+  useEffect(() => {
+    load().catch(() => setStatus('unavailable'));
+    // The server announces every change; the slow poll covers a dropped event stream.
+    const es = new EventSource('api/events');
+    es.addEventListener('change', () => { load().catch(() => {}); });
+    const t = setInterval(() => { load().catch(() => {}); }, 60000);
+    return () => { es.close(); clearInterval(t); };
+  }, [load]);
+
+  const send = async (method, url, body) => {
+    let r;
+    try {
+      r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+    } catch {
+      throw new StoreError('unavailable');
+    }
+    if (!r.ok) throw new StoreError(r.status === 413 ? 'quota_exceeded' : r.status === 400 ? 'bad_request' : 'unavailable');
+    await load().catch(() => {});
+  };
+
+  return {
+    status,
+    shared: true,
+    canWrite: true,
+    data,
+    whoUpdated: '',
+    unavailableText: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ อาจกำลังเปิดเครื่อง (รอประมาณ 1 นาที) แล้วรีเฟรชหน้านี้',
+    saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
+    deleteJob: (id) => send('DELETE', `api/jobs/${encodeURIComponent(id)}`),
+    saveImpact: (pid, impact) => send('PUT', `api/plants/${pid}`, { impact }),
+    importData: (d) => send('POST', 'api/import', d),
+    resetSample: null,
+  };
 }
 
 /* ---------------- local (per-browser) ---------------- */
@@ -206,5 +260,8 @@ function useSharedStore() {
     updatedAt: parts.meta.updatedAt || null,
   };
 
-  return { status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null };
+  return {
+    status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null,
+    unavailableText: 'กรุณาเข้าสู่ระบบ claude.ai ด้วยบัญชีที่ได้รับเชิญ แล้วเปิดลิงก์นี้อีกครั้ง หากยังเปิดไม่ได้ ให้ขอสิทธิ์จากเจ้าของแดชบอร์ด',
+  };
 }
