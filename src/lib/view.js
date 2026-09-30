@@ -28,7 +28,7 @@ function jobRow(j, i, pid, t) {
     photos: (j.photos || []).map((ph) => ({
       src: ph.src,
       date: thD(pd(ph.date)),
-      caption: `โรงไฟฟ้า ${pid} · ${j.issue} · ${thD(pd(ph.date))}`,
+      caption: `โรงไฟฟ้า ${pid}${j.wo ? ` · ${j.wo}` : ''} · ${j.issue} · ${thD(pd(ph.date))}`,
     })),
   };
 }

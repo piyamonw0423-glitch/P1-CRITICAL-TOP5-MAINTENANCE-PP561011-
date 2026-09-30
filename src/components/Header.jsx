@@ -9,7 +9,7 @@ export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly,
       <div className="brand">
         <div className="brand-mark"><Icon name="factory" /></div>
         <div className="brand-text">
-          <h1 className="brand-title"><span className="brand-hot">P1 CRITICAL TOP5</span> MAINTENANCE DASHBOARD</h1>
+          <h1 className="brand-title"><span className="brand-hot">P1 CRITICAL</span> MAINTENANCE DASHBOARD</h1>
           <div className="brand-sub">สรุปสถานะงานซ่อมเร่งด่วน (Priority 1) · โรงไฟฟ้า 5, 10, 6 และ 11</div>
         </div>
       </div>

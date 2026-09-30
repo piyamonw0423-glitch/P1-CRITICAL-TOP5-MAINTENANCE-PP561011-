@@ -84,7 +84,7 @@ export default function App() {
     const rank = data.jobs.filter((j) => j.plant === pid).length + 1;
     setModal({
       type: 'job',
-      job: { id: null, plant: pid, rank, issue: '', action: '', owner: '', team: '', start: iso(t), end: iso(e), progress: 0, status: 'pending', blocker: 'none', note: '', photos: [] },
+      job: { id: null, wo: '', plant: pid, rank, issue: '', action: '', owner: '', team: '', start: iso(t), end: iso(e), progress: 0, status: 'pending', blocker: 'none', note: '', photos: [] },
     });
   };
 

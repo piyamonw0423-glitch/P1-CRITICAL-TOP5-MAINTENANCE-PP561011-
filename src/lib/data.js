@@ -60,7 +60,8 @@ export const counts = (jobs, t) => {
 };
 
 let _id = 100;
-const J = (plant, rank, issue, action, owner, team, start, end, progress, status, blocker, note) => ({ id: 'j' + (_id++), plant, rank, issue, action, owner, team, start, end, progress, status, blocker, note });
+// Sample WO numbers use the placeholder format WO-P<plant>-<seq>; replace them with the real work-order numbers.
+const J = (plant, rank, issue, action, owner, team, start, end, progress, status, blocker, note) => ({ id: 'j' + (_id++), wo: `WO-P${plant}-${String(rank).padStart(3, '0')}`, plant, rank, issue, action, owner, team, start, end, progress, status, blocker, note });
 export const SEED = () => ({
   updatedAt: new Date().toISOString(),
   plants: {

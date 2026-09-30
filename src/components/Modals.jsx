@@ -120,6 +120,9 @@ export function JobModal({ initial, busy, onSave, onDelete, onClose }) {
         <Field label="ลำดับความสำคัญ (1 = สำคัญสุด)">
           <input className="field" type="number" min="1" value={d.rank} onChange={set('rank')} />
         </Field>
+        <Field label="เลข WO (Work Order)">
+          <input className="field" value={d.wo || ''} onChange={set('wo')} placeholder="เช่น WO-P5-001" />
+        </Field>
         <Field label="1. ปัญหาเครื่องจักร" wide>
           <input className={`field${err ? ' is-invalid' : ''}`} value={d.issue} onChange={(e) => { setErr(''); set('issue')(e); }} placeholder="เช่น Boiler Feed Pump B สั่นสูง" autoFocus={!d.id} aria-invalid={!!err} />
           {err && <span className="field-error">{err}</span>}

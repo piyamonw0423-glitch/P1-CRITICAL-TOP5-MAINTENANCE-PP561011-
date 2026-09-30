@@ -38,6 +38,7 @@ function JobRow({ row, edit, onEdit, onPhoto }) {
         </div>
         <span className="job-action">→ {job.action}</span>
         <div className="job-meta">
+          {job.wo && <span className="job-wo">{job.wo}</span>}
           <span className="job-owner">{job.owner}</span>
           <span className="muted">{job.team}</span>
           <span className="muted nowrap">{row.range}</span>
