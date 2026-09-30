@@ -26,8 +26,8 @@ npm run preview
 ```
 
 `dist/` เป็นเว็บแบบ static ใช้ path แบบ relative วางบนโฮสต์ใดก็ได้
-มี workflow `.github/workflows/deploy.yml` สำหรับ deploy ขึ้น GitHub Pages อัตโนมัติเมื่อ push เข้า `main`
-(ต้องตั้ง Settings → Pages → Source เป็น "GitHub Actions")
+เว็บจริง: https://piyamonw0423-glitch.github.io/P1-CRITICAL-TOP5-MAINTENANCE-PP561011-/
+ทุกครั้งที่ push เข้า `main` workflow `.github/workflows/deploy.yml` จะ build แล้วเผยแพร่ไปที่ branch `gh-pages` ให้เอง
 
 ### เผยแพร่เป็นหน้าเว็บบน claude.ai (Artifact)
 
