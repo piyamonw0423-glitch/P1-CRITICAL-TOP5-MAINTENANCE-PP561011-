@@ -7,7 +7,7 @@
 //   EDITOR_EMAILS (optional)              comma-separated editors when Access is on
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "p1-maintenance-dashboard",
+  "name": "p1-critical-top5-maintenance-pp561011",
   "main": "worker/index.js",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
