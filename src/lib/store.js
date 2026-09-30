@@ -1,0 +1,210 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
+import { iso, today0 } from './dates.js';
+
+/*
+ * Data layer. Two backends behind one hook:
+ *  - shared: the claude.ai artifact `db` capability (artifact build, __SHARED__ = true).
+ *    Everyone with edit access reads and writes the same records, live.
+ *      jobs/<jobId>      one job (without photos)
+ *      photos/<photoId>  { jobId, src, date } — kept apart to stay under the 256 KiB doc limit
+ *      plants/<plantId>  { impact: string[] }
+ *      history/<date>    { date, done, doing, stuck, p } — one snapshot per day for the trend
+ *      meta/app          { updatedAt, updatedBy }
+ *  - local: browser localStorage (plain website build), seeded with sample data.
+ */
+
+// eslint-disable-next-line no-undef
+export const SHARED = typeof __SHARED__ !== 'undefined' && __SHARED__;
+
+const newId = (p) => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+export class StoreError extends Error {
+  constructor(code, message) { super(message || code); this.code = code; }
+}
+
+// Retry once on a transient `unavailable`, as the db contract recommends.
+async function call(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e?.code !== 'unavailable') throw new StoreError(e?.code || 'unknown', e?.message);
+    await new Promise((r) => setTimeout(r, 400 + Math.random() * 600));
+    try { return await fn(); } catch (e2) { throw new StoreError(e2?.code || 'unknown', e2?.message); }
+  }
+}
+
+const snapshotFor = (jobs) => {
+  const t = today0();
+  const p = Object.fromEntries(PLANT_IDS.map((id) => [id, counts(jobs.filter((j) => j.plant === id), t)]));
+  return { date: iso(t), ...counts(jobs, t), p };
+};
+
+const stripPhotos = ({ photos, ...job }) => job; // eslint-disable-line no-unused-vars
+
+/** The old single-browser data (from the local-only version of this page), if any. */
+export const readLocalBackup = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return s && Array.isArray(s.jobs) && s.jobs.length ? s : null;
+  } catch {
+    return null;
+  }
+};
+
+export function useDashboardStore() {
+  return SHARED ? useSharedStore() : useLocalStore(); // eslint-disable-line react-hooks/rules-of-hooks
+}
+
+/* ---------------- local (per-browser) ---------------- */
+
+function useLocalStore() {
+  const [data, setData] = useState(loadData);
+  const commit = (next) => {
+    const { next: saved, ok } = commitData(next);
+    setData(saved);
+    if (!ok) throw new StoreError('quota_exceeded');
+  };
+  return {
+    status: 'ready',
+    shared: false,
+    canWrite: true,
+    data,
+    whoUpdated: '',
+    saveJob: async (job) => {
+      const exists = data.jobs.some((j) => j.id === job.id);
+      commit({ ...data, jobs: exists ? data.jobs.map((j) => (j.id === job.id ? job : j)) : data.jobs.concat([job]) });
+    },
+    deleteJob: async (id) => commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }),
+    saveImpact: async (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } }),
+    importData: async (d) => commit({ plants: {}, history: [], ...d }),
+    resetSample: async () => commit(SEED()),
+  };
+}
+
+/* ---------------- shared (claude.ai artifact db) ---------------- */
+
+function useSharedStore() {
+  const [status, setStatus] = useState('connecting'); // connecting | ready | unavailable
+  const [parts, setParts] = useState({ jobs: null, photos: [], plants: {}, history: [], meta: {} });
+  const [canWrite, setCanWrite] = useState(null); // null = platform did not say; keep inputs
+  const [whoUpdated, setWhoUpdated] = useState('');
+  const dbRef = useRef(null);
+  const userRef = useRef(null);
+  const partsRef = useRef(parts);
+  partsRef.current = parts;
+
+  useEffect(() => {
+    let alive = true;
+    const unsubs = [];
+    (async () => {
+      const db = window.claude?.use ? await window.claude.use('db').catch(() => null) : null;
+      if (!alive) return;
+      if (!db) { setStatus('unavailable'); return; }
+      dbRef.current = db;
+      const user = await window.claude.use('user').catch(() => null);
+      if (!alive) return;
+      userRef.current = user;
+      if (user) user.can('data.write').then((v) => alive && setCanWrite(v)).catch(() => {});
+      else setCanWrite(false);
+
+      const onErr = (e) => { if (e?.code === 'revoked') setStatus('unavailable'); };
+      const docsToObj = (snap) => Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]));
+      unsubs.push(
+        db.collection('jobs').onSnapshot((s) => {
+          setParts((p) => ({ ...p, jobs: s.docs.map((d) => ({ ...d.data(), id: d.id })) }));
+          setStatus('ready');
+        }, onErr),
+        db.collection('photos').onSnapshot((s) => setParts((p) => ({ ...p, photos: s.docs.map((d) => ({ ...d.data(), id: d.id })) })), onErr),
+        db.collection('plants').onSnapshot((s) => setParts((p) => ({ ...p, plants: docsToObj(s) })), onErr),
+        db.collection('history').onSnapshot((s) => setParts((p) => ({ ...p, history: s.docs.map((d) => d.data()) })), onErr),
+        db.doc('meta/app').onSnapshot((s) => setParts((p) => ({ ...p, meta: s.exists ? s.data() : {} })), onErr),
+      );
+    })();
+    return () => { alive = false; unsubs.forEach((u) => u()); };
+  }, []);
+
+  // Resolve "updated by" to a display name each time it changes (names are never stored).
+  const updatedBy = parts.meta.updatedBy;
+  useEffect(() => {
+    const user = userRef.current;
+    if (!user || !updatedBy) { setWhoUpdated(''); return; }
+    let alive = true;
+    user.profiles([updatedBy]).then((ps) => { if (alive) setWhoUpdated(ps[updatedBy]?.name || ''); }).catch(() => {});
+    return () => { alive = false; };
+  }, [updatedBy, status]);
+
+  const guard = useCallback(async (fn) => {
+    try {
+      return await fn(dbRef.current);
+    } catch (e) {
+      const err = e instanceof StoreError ? e : new StoreError(e?.code || 'unknown', e?.message);
+      if (err.code === 'invalid_argument') setCanWrite(false);
+      throw err;
+    }
+  }, []);
+
+  // After every change: today's trend snapshot + who/when.
+  const stamp = async (db, jobsAfter) => {
+    const snap = snapshotFor(jobsAfter);
+    await call(() => db.doc(`history/${snap.date}`).set(snap));
+    const uid = userRef.current ? await userRef.current.id().catch(() => null) : null;
+    await call(() => db.doc('meta/app').set({ updatedAt: new Date().toISOString(), ...(uid ? { updatedBy: uid } : {}) }));
+  };
+
+  const writePhotos = async (db, jobId, wanted) => {
+    const existing = partsRef.current.photos.filter((ph) => ph.jobId === jobId);
+    const keep = new Set(wanted.filter((ph) => ph.id).map((ph) => ph.id));
+    for (const ph of existing) if (!keep.has(ph.id)) await call(() => db.doc(`photos/${ph.id}`).delete());
+    for (const ph of wanted) {
+      if (ph.id) continue;
+      const pid = newId('p');
+      await call(() => db.doc(`photos/${pid}`).set({ jobId, src: ph.src, date: ph.date }));
+    }
+  };
+
+  const saveJob = (job) => guard(async (db) => {
+    await writePhotos(db, job.id, job.photos || []);
+    await call(() => db.doc(`jobs/${job.id}`).set(stripPhotos(job)));
+    const others = (partsRef.current.jobs || []).filter((j) => j.id !== job.id);
+    await stamp(db, others.concat([job]));
+  });
+
+  const deleteJob = (id) => guard(async (db) => {
+    for (const ph of partsRef.current.photos.filter((p) => p.jobId === id)) await call(() => db.doc(`photos/${ph.id}`).delete());
+    await call(() => db.doc(`jobs/${id}`).delete());
+    await stamp(db, (partsRef.current.jobs || []).filter((j) => j.id !== id));
+  });
+
+  const saveImpact = (pid, impact) => guard(async (db) => {
+    await call(() => db.doc(`plants/${pid}`).set({ impact }));
+    await stamp(db, partsRef.current.jobs || []);
+  });
+
+  // Adds/overwrites every job, plant and history entry from an exported file (or the old local data).
+  const importData = (d) => guard(async (db) => {
+    for (const job of d.jobs) {
+      const j = { ...job, id: String(job.id || newId('j')).replace(/[^\w\-.~:@+]/g, '_') };
+      await writePhotos(db, j.id, (j.photos || []).map(({ src, date }) => ({ src, date })));
+      await call(() => db.doc(`jobs/${j.id}`).set(stripPhotos(j)));
+    }
+    for (const [pid, v] of Object.entries(d.plants || {})) await call(() => db.doc(`plants/${pid}`).set({ impact: v.impact || [] }));
+    for (const h of d.history || []) if (h?.date) await call(() => db.doc(`history/${h.date}`).set(h));
+    const byId = new Map((partsRef.current.jobs || []).map((j) => [j.id, j]));
+    d.jobs.forEach((j) => byId.set(j.id, j));
+    await stamp(db, [...byId.values()]);
+  });
+
+  const photosByJob = {};
+  parts.photos.forEach((ph) => { (photosByJob[ph.jobId] ||= []).push({ id: ph.id, src: ph.src, date: ph.date }); });
+  Object.values(photosByJob).forEach((arr) => arr.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)));
+
+  const data = {
+    jobs: (parts.jobs || []).map((j) => ({ ...j, photos: photosByJob[j.id] || [] })),
+    plants: parts.plants,
+    history: [...parts.history].sort((a, b) => a.date.localeCompare(b.date)),
+    updatedAt: parts.meta.updatedAt || null,
+  };
+
+  return { status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null };
+}

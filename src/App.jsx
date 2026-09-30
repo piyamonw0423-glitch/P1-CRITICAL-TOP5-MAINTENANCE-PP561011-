@@ -5,9 +5,11 @@ import PlantCard from './components/PlantCard.jsx';
 import { BlockerSummary, TrendPanel } from './components/Insights.jsx';
 import { ImpactModal, JobModal, Lightbox } from './components/Modals.jsx';
 import { ConfirmDialog, Toast } from './components/Feedback.jsx';
-import { FILTERS, SEED, commitData, loadData } from './lib/data.js';
+import { EmptyState, StatusPanel } from './components/States.jsx';
+import { FILTERS } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
+import { readLocalBackup, useDashboardStore } from './lib/store.js';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -16,8 +18,16 @@ const readView = () => {
   return FILTERS.some((f) => f.k === v) ? v : 'all';
 };
 
+const ERROR_TEXT = {
+  invalid_argument: 'คุณไม่มีสิทธิ์แก้ไขข้อมูลในหน้านี้ ขอสิทธิ์ผู้แก้ไขจากเจ้าของหน้า',
+  quota_exceeded: 'พื้นที่จัดเก็บเต็ม กรุณาลบรูปเก่าบางรูปแล้วลองใหม่',
+  resource_exhausted: 'บันทึกถี่เกินไป รอสักครู่แล้วลองใหม่',
+};
+const errorText = (e) => ERROR_TEXT[e?.code] || 'บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่';
+
 export default function App() {
-  const [data, setData] = useState(loadData);
+  const store = useDashboardStore();
+  const { data, status, canWrite } = store;
   const [editMode, setEditMode] = useState(false);
   const [modal, setModal] = useState(null); // { type: 'job', job } | { type: 'plant', pid }
   const [lightbox, setLightbox] = useState(null);
@@ -25,6 +35,8 @@ export default function App() {
   const [now, setNow] = useState(() => new Date());
   const [ask, setAsk] = useState(null); // { message, confirmLabel, onConfirm }
   const [toast, setToast] = useState(null); // { text, error? }
+  const [busy, setBusy] = useState(false);
+  const [backup] = useState(readLocalBackup);
   const clearToast = useCallback(() => setToast(null), []);
   const closeAsk = useCallback(() => setAsk(null), []);
 
@@ -42,16 +54,28 @@ export default function App() {
     } catch { /* sandboxed frames may refuse history updates */ }
   }, [filter]);
 
+  // Leave edit mode if the platform says this viewer cannot write.
+  useEffect(() => { if (canWrite === false) setEditMode(false); }, [canWrite]);
+
   const t = today0();
   const tKey = iso(t);
   // Recompute when the calendar day rolls over (t is derived from tKey).
   const view = useMemo(() => dashboardView(data, filter, t), [data, filter, tKey]);
 
-  const commit = (next, okText = 'บันทึกแล้ว') => {
-    const { next: saved, ok } = commitData(next);
-    setToast(ok ? { text: okText } : { text: 'พื้นที่จัดเก็บในเครื่องเต็ม กรุณาลบรูปเก่าบางรูป หรือส่งออกไฟล์เก็บไว้ก่อน', error: true });
-    setData(saved);
-    setModal(null);
+  // Run a store write; close dialogs and toast on success, keep the form open on failure.
+  const run = async (fn, okText) => {
+    setBusy(true);
+    try {
+      await fn();
+      setModal(null);
+      setAsk(null);
+      setToast({ text: okText });
+    } catch (e) {
+      setAsk(null);
+      setToast({ text: errorText(e), error: true });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const openNew = (pid) => {
@@ -64,20 +88,11 @@ export default function App() {
     });
   };
 
-  const saveJob = (job) => {
-    const exists = data.jobs.some((j) => j.id === job.id);
-    commit({ ...data, jobs: exists ? data.jobs.map((j) => (j.id === job.id ? job : j)) : data.jobs.concat([job]) });
-  };
-
-  const deleteJob = (id) => {
-    setAsk({
-      message: 'ลบงานนี้? ลบแล้วกู้คืนไม่ได้',
-      confirmLabel: 'ลบงาน',
-      onConfirm: () => { setAsk(null); commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }, 'ลบงานแล้ว'); },
-    });
-  };
-
-  const saveImpact = (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } });
+  const deleteJob = (id) => setAsk({
+    message: 'ลบงานนี้? ลบแล้วกู้คืนไม่ได้',
+    confirmLabel: 'ลบงาน',
+    onConfirm: () => run(() => store.deleteJob(id), 'ลบงานแล้ว'),
+  });
 
   const exportData = async () => {
     const filename = `P1-dashboard-${iso(t)}.json`;
@@ -100,68 +115,108 @@ export default function App() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
+  const importParsed = (d) => run(() => store.importData(d), `นำเข้า ${d.jobs.length} งานแล้ว`);
+
   const importFile = (f) =>
     f.text().then((txt) => {
+      let d;
       try {
-        const d = JSON.parse(txt);
+        d = JSON.parse(txt);
         if (!Array.isArray(d.jobs)) throw new Error('missing jobs');
-        commit({ plants: {}, history: [], ...d }, 'นำเข้าข้อมูลแล้ว');
       } catch {
         setToast({ text: 'ไฟล์ไม่ถูกต้อง ต้องเป็นไฟล์ .json ที่ส่งออกจากแดชบอร์ดนี้', error: true });
+        return;
       }
+      setAsk({
+        message: `นำเข้า ${d.jobs.length} งานจากไฟล์? งานที่มีรหัสเดียวกันจะถูกแทนที่`,
+        confirmLabel: 'นำเข้า',
+        onConfirm: () => importParsed(d),
+      });
     });
 
-  const resetData = () => {
-    setAsk({
+  const resetData = store.resetSample
+    ? () => setAsk({
       message: 'คืนค่าข้อมูลตัวอย่าง? ข้อมูลที่แก้ไขในเครื่องนี้จะหายไป',
       confirmLabel: 'คืนค่าข้อมูล',
-      onConfirm: () => { setAsk(null); commit(SEED(), 'คืนค่าข้อมูลตัวอย่างแล้ว'); },
-    });
-  };
+      onConfirm: () => run(store.resetSample, 'คืนค่าข้อมูลตัวอย่างแล้ว'),
+    })
+    : null;
 
   const scopeLabel = view.ids.length === 4 ? 'ทั้ง 4 โรง' : ` · ${view.filter.label}`;
+  const ready = status === 'ready';
+  const empty = ready && data.jobs.length === 0;
 
   return (
     <div className="app">
-      <Header now={now} updatedAt={data.updatedAt} editMode={editMode} onToggleEdit={() => setEditMode((v) => !v)} />
-      {editMode && <EditBar onExport={exportData} onImportFile={importFile} onReset={resetData} />}
+      <Header
+        now={now}
+        updatedAt={data.updatedAt}
+        updatedBy={store.whoUpdated}
+        editMode={editMode}
+        canEdit={ready && canWrite !== false}
+        readOnly={ready && canWrite === false}
+        onToggleEdit={() => setEditMode((v) => !v)}
+      />
+      {editMode && <EditBar shared={store.shared} onExport={exportData} onImportFile={importFile} onReset={resetData} />}
 
       <main className="main">
-        <FilterSelect value={filter} color={view.color} onChange={setFilter} />
+        {status === 'connecting' && <StatusPanel title="กำลังโหลดข้อมูลล่าสุด…" />}
+        {status === 'unavailable' && (
+          <StatusPanel
+            title="ยังเปิดข้อมูลแดชบอร์ดไม่ได้"
+            text="กรุณาเข้าสู่ระบบ claude.ai ด้วยบัญชีที่ได้รับเชิญ แล้วเปิดลิงก์นี้อีกครั้ง หากยังเปิดไม่ได้ ให้ขอสิทธิ์จากเจ้าของแดชบอร์ด"
+          />
+        )}
+        {empty && (
+          <EmptyState
+            canWrite={canWrite !== false}
+            backupCount={backup?.jobs.length || 0}
+            busy={busy}
+            onStart={() => { setEditMode(true); openNew(5); }}
+            onMigrate={() => importParsed(backup)}
+            onImportFile={importFile}
+          />
+        )}
 
-        <div className="summary">
-          <KpiRow kpi={view.kpi} />
-          <Highlights items={view.highlights} />
-        </div>
+        {ready && !empty && (
+          <>
+            <FilterSelect value={filter} color={view.color} onChange={setFilter} />
 
-        <div className="groups">
-          {view.groups.map((g) => (
-            <section key={g.k} className="group">
-              <div className="group-head">
-                <h2 className="group-title">{g.title}</h2>
-                <span className="group-note">{g.note}</span>
-              </div>
-              <div className="group-plants">
-                {g.plants.map((p) => (
-                  <PlantCard
-                    key={p.id}
-                    p={p}
-                    edit={editMode}
-                    onEditJob={(job) => setModal({ type: 'job', job })}
-                    onAddJob={() => openNew(p.id)}
-                    onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
-                    onPhoto={setLightbox}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+            <div className="summary">
+              <KpiRow kpi={view.kpi} />
+              <Highlights items={view.highlights} />
+            </div>
 
-        <div className="insights">
-          <BlockerSummary items={view.blockers} scopeLabel={scopeLabel} />
-          <TrendPanel hist={view.history} />
-        </div>
+            <div className="groups">
+              {view.groups.map((g) => (
+                <section key={g.k} className="group">
+                  <div className="group-head">
+                    <h2 className="group-title">{g.title}</h2>
+                    <span className="group-note">{g.note}</span>
+                  </div>
+                  <div className="group-plants">
+                    {g.plants.map((p) => (
+                      <PlantCard
+                        key={p.id}
+                        p={p}
+                        edit={editMode}
+                        onEditJob={(job) => setModal({ type: 'job', job })}
+                        onAddJob={() => openNew(p.id)}
+                        onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
+                        onPhoto={setLightbox}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <div className="insights">
+              <BlockerSummary items={view.blockers} scopeLabel={scopeLabel} />
+              <TrendPanel hist={view.history} />
+            </div>
+          </>
+        )}
       </main>
 
       <footer className="app-footer">
@@ -170,13 +225,25 @@ export default function App() {
       </footer>
 
       {modal?.type === 'job' && (
-        <JobModal initial={modal.job} onSave={saveJob} onDelete={() => deleteJob(modal.job.id)} onClose={() => setModal(null)} />
+        <JobModal
+          initial={modal.job}
+          busy={busy}
+          onSave={(job) => run(() => store.saveJob(job), 'บันทึกแล้ว')}
+          onDelete={() => deleteJob(modal.job.id)}
+          onClose={() => setModal(null)}
+        />
       )}
       {modal?.type === 'plant' && (
-        <ImpactModal pid={modal.pid} impact={data.plants[modal.pid]?.impact || []} onSave={(impact) => saveImpact(modal.pid, impact)} onClose={() => setModal(null)} />
+        <ImpactModal
+          pid={modal.pid}
+          busy={busy}
+          impact={data.plants[modal.pid]?.impact || []}
+          onSave={(impact) => run(() => store.saveImpact(modal.pid, impact), 'บันทึกแล้ว')}
+          onClose={() => setModal(null)}
+        />
       )}
       {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
-      {ask && <ConfirmDialog {...ask} onCancel={closeAsk} />}
+      {ask && <ConfirmDialog {...ask} busy={busy} onCancel={closeAsk} />}
       <Toast toast={toast} onDone={clearToast} />
     </div>
   );

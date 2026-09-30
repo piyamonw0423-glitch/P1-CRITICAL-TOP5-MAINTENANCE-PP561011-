@@ -35,6 +35,9 @@ npm run preview
 npm run build:artifact   # สร้าง dist-artifact/p1-dashboard.html (ไฟล์เดียว, React โหลดจาก cdnjs)
 ```
 
+เวอร์ชัน Artifact ใช้ฐานข้อมูลกลางของหน้า (capability `db`) ทุกคนที่มีสิทธิ์แก้ไขเห็นและบันทึกข้อมูลชุดเดียวกันแบบเรียลไทม์
+(ดูโครงสร้างข้อมูลใน `src/lib/store.js`) ส่วนเว็บปกติ (`npm run build`) ยังเก็บข้อมูลใน localStorage ของแต่ละเครื่อง
+
 ## โครงสร้าง
 
 - `src/lib/data.js` — ข้อมูลตั้งต้น, สีประจำโรง/สถานะ/ปัญหา, การบันทึก

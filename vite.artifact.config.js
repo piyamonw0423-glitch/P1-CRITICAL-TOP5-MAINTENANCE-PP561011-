@@ -8,6 +8,7 @@ const shim = fileURLToPath(new URL('./src/lib/jsx-shim.js', import.meta.url));
 // cdnjs UMD globals (see scripts/build-artifact.mjs), everything else is inlined.
 export default defineConfig({
   plugins: [react()],
+  define: { __SHARED__: 'true' },
   resolve: { alias: { 'react/jsx-runtime': shim, 'react/jsx-dev-runtime': shim } },
   build: {
     outDir: 'dist-artifact',

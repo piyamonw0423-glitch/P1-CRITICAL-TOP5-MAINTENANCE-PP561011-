@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 // In-page replacements for confirm()/alert(), which sandboxed viewers (e.g. claude.ai artifacts) suppress.
 
-export function ConfirmDialog({ message, confirmLabel, onConfirm, onCancel }) {
+export function ConfirmDialog({ message, confirmLabel, busy, onConfirm, onCancel }) {
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onCancel(); };
     window.addEventListener('keydown', h);
@@ -14,7 +14,7 @@ export function ConfirmDialog({ message, confirmLabel, onConfirm, onCancel }) {
         <p className="confirm-msg">{message}</p>
         <div className="modal-foot-right">
           <button type="button" className="btn btn-ghost" onClick={onCancel} autoFocus>ยกเลิก</button>
-          <button type="button" className="btn btn-danger-solid" onClick={onConfirm}>{confirmLabel}</button>
+          <button type="button" className="btn btn-danger-solid" onClick={onConfirm} disabled={busy}>{busy ? 'กำลังบันทึก…' : confirmLabel}</button>
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { iso, pd, thD, today0 } from '../lib/dates.js';
 import { shrinkImage } from '../lib/photos.js';
 
 const MAX_PHOTOS = 4;
+const MAX_PHOTO_CHARS = 200000;
 
 function useEscape(fn) {
   useEffect(() => {
@@ -29,19 +30,19 @@ function Shell({ color, title, onClose, children }) {
   );
 }
 
-function Footer({ onDelete, onClose, onSave }) {
+function Footer({ busy, onDelete, onClose, onSave }) {
   return (
     <div className="modal-foot">
-      <div>{onDelete && <button type="button" className="btn btn-danger" onClick={onDelete}>ลบงานนี้</button>}</div>
+      <div>{onDelete && <button type="button" className="btn btn-danger" onClick={onDelete} disabled={busy}>ลบงานนี้</button>}</div>
       <div className="modal-foot-right">
         <button type="button" className="btn btn-ghost" onClick={onClose}>ยกเลิก</button>
-        <button type="button" className="btn btn-save" onClick={onSave}>บันทึก</button>
+        <button type="button" className="btn btn-save" onClick={onSave} disabled={busy}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>
       </div>
     </div>
   );
 }
 
-export function ImpactModal({ pid, impact, onSave, onClose }) {
+export function ImpactModal({ pid, impact, busy, onSave, onClose }) {
   const [text, setText] = useState(impact.join('\n'));
   return (
     <Shell color={PLANT_META[pid].color} title={`ผลกระทบ · โรงไฟฟ้า ${pid}`} onClose={onClose}>
@@ -49,7 +50,7 @@ export function ImpactModal({ pid, impact, onSave, onClose }) {
         <label className="field-label" htmlFor="impact-text">ผลกระทบต่อโรงไฟฟ้า (1 บรรทัด = 1 ข้อ)</label>
         <textarea id="impact-text" className="field field-area" rows={4} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
       </div>
-      <Footer onClose={onClose} onSave={() => onSave(text.split('\n').map((s) => s.trim()).filter(Boolean))} />
+      <Footer busy={busy} onClose={onClose} onSave={() => onSave(text.split('\n').map((s) => s.trim()).filter(Boolean))} />
     </Shell>
   );
 }
@@ -63,7 +64,7 @@ function Field({ label, wide, children }) {
   );
 }
 
-export function JobModal({ initial, onSave, onDelete, onClose }) {
+export function JobModal({ initial, busy, onSave, onDelete, onClose }) {
   const [d, setD] = useState(() => ({ photos: [], ...initial, plant: String(initial.plant) }));
   const [err, setErr] = useState('');
 
@@ -90,7 +91,13 @@ export function JobModal({ initial, onSave, onDelete, onClose }) {
     const date = iso(today0());
     const out = [];
     for (const f of files.slice(0, room)) {
-      try { out.push({ src: await shrinkImage(f), date }); } catch { /* skip unreadable file */ }
+      try {
+        let src = await shrinkImage(f);
+        // Shared storage caps each record at 256 KiB, so re-compress large photos.
+        if (src.length > MAX_PHOTO_CHARS) src = await shrinkImage(f, 560, 0.6);
+        if (src.length > MAX_PHOTO_CHARS) src = await shrinkImage(f, 420, 0.5);
+        out.push({ src, date });
+      } catch { /* skip unreadable file */ }
     }
     setD((s) => ({ ...s, photos: s.photos.concat(out).slice(0, MAX_PHOTOS) }));
   };
@@ -166,7 +173,7 @@ export function JobModal({ initial, onSave, onDelete, onClose }) {
           </div>
         </div>
       </div>
-      <Footer onDelete={d.id ? onDelete : null} onClose={onClose} onSave={save} />
+      <Footer busy={busy} onDelete={d.id ? onDelete : null} onClose={onClose} onSave={save} />
     </Shell>
   );
 }

@@ -2,8 +2,8 @@ import { useRef } from 'react';
 import Icon from '../lib/icons.jsx';
 import { hhmm, thD } from '../lib/dates.js';
 
-export function Header({ now, updatedAt, editMode, onToggleEdit }) {
-  const up = new Date(updatedAt);
+export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly, onToggleEdit }) {
+  const up = updatedAt ? new Date(updatedAt) : null;
   return (
     <header className="app-header">
       <div className="brand">
@@ -18,27 +18,35 @@ export function Header({ now, updatedAt, editMode, onToggleEdit }) {
           <span className="date-chip-icon"><Icon name="calendar" /></span>
           <div className="date-chip-text">
             <span className="date-chip-now">{thD(now)} {now.getFullYear() + 543} · {hhmm(now)} น.</span>
-            <span className="date-chip-updated">อัปเดตล่าสุด {thD(up)} {hhmm(up)} น.</span>
+            <span className="date-chip-updated">
+              {up ? `อัปเดตล่าสุด ${thD(up)} ${hhmm(up)} น.${updatedBy ? ` · ${updatedBy}` : ''}` : 'ยังไม่มีการอัปเดต'}
+            </span>
           </div>
         </div>
-        <button type="button" className={`edit-toggle${editMode ? ' is-on' : ''}`} onClick={onToggleEdit}>
-          <span className="ico"><Icon name="pencil" /></span>
-          {editMode ? 'เสร็จสิ้นการแก้ไข' : 'อัปเดตงานประจำวัน'}
-        </button>
+        {canEdit && (
+          <button type="button" className={`edit-toggle${editMode ? ' is-on' : ''}`} onClick={onToggleEdit}>
+            <span className="ico"><Icon name="pencil" /></span>
+            {editMode ? 'เสร็จสิ้นการแก้ไข' : 'อัปเดตงานประจำวัน'}
+          </button>
+        )}
+        {readOnly && <span className="readonly-chip">ดูอย่างเดียว</span>}
       </div>
     </header>
   );
 }
 
-export function EditBar({ onExport, onImportFile, onReset }) {
+export function EditBar({ shared, onExport, onImportFile, onReset }) {
   const fileRef = useRef(null);
   return (
     <div className="edit-bar">
-      <span>โหมดแก้ไข · คลิกที่งานเพื่ออัปเดตความคืบหน้า คลิกกล่อง "ผลกระทบ" เพื่อแก้ข้อความ ข้อมูลบันทึกในเครื่องนี้อัตโนมัติ</span>
+      <span>
+        โหมดแก้ไข · คลิกที่งานเพื่ออัปเดตความคืบหน้า คลิกกล่อง "ผลกระทบ" เพื่อแก้ข้อความ ·{' '}
+        {shared ? 'กดบันทึกแล้วทุกคนที่เปิดลิงก์นี้จะเห็นทันที' : 'ข้อมูลบันทึกในเครื่องนี้อัตโนมัติ'}
+      </span>
       <div className="edit-bar-actions">
-        <button type="button" className="pill-btn" onClick={onExport}><span className="ico"><Icon name="download" /></span>ส่งออกไฟล์ (แชร์ทีม)</button>
+        <button type="button" className="pill-btn" onClick={onExport}><span className="ico"><Icon name="download" /></span>{shared ? 'ส่งออกไฟล์ (สำรองข้อมูล)' : 'ส่งออกไฟล์ (แชร์ทีม)'}</button>
         <button type="button" className="pill-btn" onClick={() => fileRef.current?.click()}><span className="ico"><Icon name="upload" /></span>นำเข้าไฟล์</button>
-        <button type="button" className="pill-btn is-danger" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button>
+        {onReset && <button type="button" className="pill-btn is-danger" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button>}
         <input
           ref={fileRef}
           type="file"
