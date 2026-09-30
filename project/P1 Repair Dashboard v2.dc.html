@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-bd86f516-f3ce-4021-bc18-004c4ca54e99/styles.css">
+<script src="_ds/organic-bd86f516-f3ce-4021-bc18-004c4ca54e99/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&amp;family=Anuphan:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:oklch(0.965 0.012 250);font-family:"Anuphan",system-ui,sans-serif;color:oklch(0.25 0.04 258);}
+a{color:oklch(0.5 0.17 255);}a:hover{color:oklch(0.4 0.17 255);}
+input,select,textarea{font-family:inherit;}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;min-height:100vh;">
+
+  <header style="background:oklch(0.27 0.07 258);color:white;padding:16px 28px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
+    <div style="display:flex;align-items:center;gap:16px;min-width:0;">
+      <div style="width:56px;height:56px;border-radius:18px;background:oklch(0.36 0.09 258);display:flex;align-items:center;justify-content:center;font-size:32px;color:oklch(0.85 0.14 85);flex:none;">{{ ic.factory }}</div>
+      <div style="display:flex;flex-direction:column;min-width:0;">
+        <div style="font-family:'Kanit',sans-serif;font-weight:700;font-size:clamp(22px,2.4vw,34px);line-height:1.2;letter-spacing:0.01em;"><span style="color:oklch(0.72 0.19 30);">P1 CRITICAL&nbsp;<span style="letter-spacing: 0.33504px;">TOP5&nbsp;</span></span> MAINTENANCE DASHBOARD</div>
+        <div style="font-size:16px;line-height:1.4;color:oklch(0.88 0.03 258);">สรุปสถานะงานซ่อมเร่งด่วน (Priority 1) · โรงไฟฟ้า 5, 10, 6 และ 11</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:16px;background:oklch(0.36 0.09 258);">
+        <span style="font-size:22px;color:oklch(0.85 0.14 85);display:flex;">{{ ic.calendar }}</span>
+        <div style="display:flex;flex-direction:column;line-height:1.3;">
+          <span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:17px;white-space:nowrap;">{{ nowText }}</span>
+          <span style="font-size:12px;color:oklch(0.85 0.03 258);white-space:nowrap;">อัปเดตล่าสุด {{ updatedText }}</span>
+        </div>
+      </div>
+      <button onClick="{{ toggleEdit }}" style="display:flex;align-items:center;gap:8px;border:0;cursor:pointer;padding:12px 20px;border-radius:999px;font-family:'Kanit',sans-serif;font-size:15px;font-weight:500;background:{{ editBtnBg }};color:{{ editBtnFg }};" style-hover="filter:brightness(1.08);"><span style="display:flex;font-size:17px;">{{ ic.pencil }}</span>{{ editBtnText }}</button>
+    </div>
+  </header>
+
+  <sc-if value="{{ editMode }}" hint-placeholder-val="{{ false }}">
+    <div style="background:oklch(0.93 0.07 85);color:oklch(0.35 0.08 65);padding:10px 28px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;font-size:14px;font-weight:600;">
+      <span>โหมดแก้ไข · คลิกที่งานเพื่ออัปเดตความคืบหน้า คลิกกล่อง "ผลกระทบ" เพื่อแก้ข้อความ ข้อมูลบันทึกในเครื่องนี้อัตโนมัติ</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button onClick="{{ exportData }}" style="display:flex;align-items:center;gap:6px;border:0;cursor:pointer;padding:7px 14px;border-radius:999px;background:white;color:oklch(0.3 0.06 258);font-weight:600;font-size:13px;" style-hover="background:oklch(0.97 0.02 85);"><span style="display:flex;">{{ ic.download }}</span>ส่งออกไฟล์ (แชร์ทีม)</button>
+        <button onClick="{{ pickImport }}" style="display:flex;align-items:center;gap:6px;border:0;cursor:pointer;padding:7px 14px;border-radius:999px;background:white;color:oklch(0.3 0.06 258);font-weight:600;font-size:13px;" style-hover="background:oklch(0.97 0.02 85);"><span style="display:flex;">{{ ic.upload }}</span>นำเข้าไฟล์</button>
+        <button onClick="{{ resetData }}" style="border:0;cursor:pointer;padding:7px 14px;border-radius:999px;background:transparent;color:oklch(0.45 0.15 30);font-weight:600;font-size:13px;" style-hover="background:oklch(0.9 0.06 60);">คืนค่าข้อมูลตัวอย่าง</button>
+        <input type="file" accept=".json" ref="{{ fileRef }}" onChange="{{ onImport }}" style="display:none;">
+      </div>
+    </div>
+  </sc-if>
+
+  <main style="flex:1;padding:18px 28px;display:flex;flex-direction:column;gap:18px;">
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;">
+      <span style="display:flex;align-items:center;gap:6px;font-family:'Kanit',sans-serif;font-weight:500;font-size:16px;margin-right:4px;"><span style="display:flex;font-size:18px;color:oklch(0.52 0.17 255);">{{ ic.filter }}</span>เลือกดู</span>
+      <div style="position:relative;display:flex;align-items:center;">
+        <span style="position:absolute;left:16px;width:12px;height:12px;border-radius:50%;background:{{ filterColor }};pointer-events:none;"></span>
+        <select value="{{ filterValue }}" onChange="{{ onFilter }}" style="appearance:none;-webkit-appearance:none;cursor:pointer;min-width:230px;padding:10px 44px 10px 38px;border-radius:999px;border:2px solid {{ filterColor }};background:white;color:oklch(0.27 0.07 258);font-family:'Anuphan',sans-serif;font-size:15px;font-weight:700;line-height:1.4;">
+          <option value="all">ทั้งหมด 4 โรง</option>
+          <optgroup label="รายกลุ่ม"><option value="5-10">กลุ่ม 1 · โรง 5 + 10</option><option value="6-11">กลุ่ม 2 · โรง 6 + 11</option></optgroup>
+          <optgroup label="รายโรง"><option value="5">โรงไฟฟ้า 5</option><option value="10">โรงไฟฟ้า 10</option><option value="6">โรงไฟฟ้า 6</option><option value="11">โรงไฟฟ้า 11</option></optgroup>
+        </select>
+        <span style="position:absolute;right:16px;display:flex;font-size:16px;color:{{ filterColor }};pointer-events:none;">{{ ic.chevron }}</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,600px),1fr));gap:16px;">
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">
+        <div style="border-radius:20px;background:oklch(0.27 0.07 258);color:white;padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:8px;font-family:'Kanit',sans-serif;font-size:16px;font-weight:500;line-height:1.4;"><span style="display:flex;font-size:20px;color:oklch(0.85 0.14 85);">{{ ic.alert }}</span>P1 ทั้งหมด</div>
+          <div style="font-family:'Kanit',sans-serif;font-weight:700;font-size:48px;line-height:1.1;">{{ kpi.total }}</div>
+          <div style="font-size:14px;color:oklch(0.85 0.03 258);">งาน · {{ kpi.plants }} โรง</div>
+        </div>
+        <div style="border-radius:20px;background:white;border:2px solid oklch(0.62 0.16 150);overflow:hidden;display:flex;flex-direction:column;">
+          <div style="background:oklch(0.62 0.16 150);color:white;padding:8px 14px;display:flex;align-items:center;gap:8px;font-family:'Kanit',sans-serif;font-size:16px;font-weight:500;line-height:1.4;"><span style="display:flex;font-size:18px;">{{ ic.check }}</span>เสร็จแล้ว</div>
+          <div style="padding:6px 14px 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-family:'Kanit',sans-serif;font-weight:700;font-size:44px;line-height:1.15;color:oklch(0.5 0.15 150);">{{ kpi.done }}</span><span style="font-size:18px;font-weight:700;color:oklch(0.5 0.15 150);">{{ kpi.donePct }}%</span></div>
+        </div>
+        <div style="border-radius:20px;background:white;border:2px solid oklch(0.8 0.15 80);overflow:hidden;display:flex;flex-direction:column;">
+          <div style="background:oklch(0.8 0.15 80);color:oklch(0.3 0.07 65);padding:8px 14px;display:flex;align-items:center;gap:8px;font-family:'Kanit',sans-serif;font-size:16px;font-weight:500;line-height:1.4;"><span style="display:flex;font-size:18px;">{{ ic.clock }}</span>กำลังดำเนินการ</div>
+          <div style="padding:6px 14px 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-family:'Kanit',sans-serif;font-weight:700;font-size:44px;line-height:1.15;color:oklch(0.55 0.13 70);">{{ kpi.doing }}</span><span style="font-size:18px;font-weight:700;color:oklch(0.55 0.13 70);">{{ kpi.doingPct }}%</span></div>
+        </div>
+        <div style="border-radius:20px;background:white;border:2px solid oklch(0.6 0.21 25);overflow:hidden;display:flex;flex-direction:column;">
+          <div style="background:oklch(0.6 0.21 25);color:white;padding:8px 14px;display:flex;align-items:center;gap:8px;font-family:'Kanit',sans-serif;font-size:16px;font-weight:500;line-height:1.4;"><span style="display:flex;font-size:18px;">{{ ic.alert }}</span>ค้าง / เกินกำหนด</div>
+          <div style="padding:6px 14px 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-family:'Kanit',sans-serif;font-weight:700;font-size:44px;line-height:1.15;color:oklch(0.55 0.21 25);">{{ kpi.stuck }}</span><span style="font-size:18px;font-weight:700;color:oklch(0.55 0.21 25);">{{ kpi.stuckPct }}%</span></div>
+        </div>
+      </div>
+      <div style="border-radius:20px;background:oklch(0.27 0.07 258);color:white;padding:14px 20px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;font-family:'Kanit',sans-serif;font-size:17px;font-weight:600;line-height:1.4;"><span style="display:flex;font-size:20px;color:oklch(0.85 0.14 85);">{{ ic.zap }}</span>KEY HIGHLIGHTS <span style="font-weight:400;color:oklch(0.85 0.03 258);">สำหรับผู้บริหาร · สรุปอัตโนมัติจากข้อมูล</span></div>
+        <sc-for list="{{ highlights }}" as="h" hint-placeholder-count="4">
+          <div style="display:flex;gap:10px;align-items:flex-start;font-size:14.5px;line-height:1.45;">
+            <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.85 0.14 85);margin-top:7px;flex:none;"></span>
+            <span><b style="color:oklch(0.85 0.14 85);">{{ h.k }}</b> {{ h.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,860px),1fr));gap:18px;">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+        <section style="display:flex;flex-direction:column;gap:10px;min-width:0;">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:0 4px;">
+            <span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:19px;line-height:1.4;">{{ g.title }}</span>
+            <span style="font-size:14px;font-weight:600;color:oklch(0.5 0.04 258);white-space:nowrap;">{{ g.note }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:14px;">
+            <sc-for list="{{ g.plants }}" as="p" hint-placeholder-count="2">
+              <article style="background:white;border-radius:22px;border:2px solid {{ p.color }};overflow:hidden;display:flex;flex-direction:column;min-width:0;box-shadow:0 4px 14px oklch(0.3 0.05 258 / 0.08);">
+                <div style="background:{{ p.color }};color:white;padding:10px 16px;display:flex;align-items:center;gap:10px;">
+                  <span style="display:flex;font-size:26px;">{{ ic.factory }}</span>
+                  <span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:24px;line-height:1.3;flex:1;">{{ p.name }}</span>
+                  <span style="padding:3px 12px;border-radius:999px;background:white;color:{{ p.color }};font-size:13px;font-weight:700;white-space:nowrap;">P1 ทั้งหมด {{ p.total }} งาน</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;padding:14px 16px 8px;">
+                  <div style="position:relative;width:104px;height:104px;flex:none;">
+                    <svg width="104" height="104" viewBox="0 0 100 100" style="transform:rotate(-90deg);">
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(0.93 0.01 250)" stroke-width="14"></circle>
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(0.62 0.16 150)" stroke-width="14" stroke-dasharray="{{ p.d1 }}" stroke-dashoffset="{{ p.o1 }}"></circle>
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(0.8 0.15 80)" stroke-width="14" stroke-dasharray="{{ p.d2 }}" stroke-dashoffset="{{ p.o2 }}"></circle>
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(0.6 0.21 25)" stroke-width="14" stroke-dasharray="{{ p.d3 }}" stroke-dashoffset="{{ p.o3 }}"></circle>
+                    </svg>
+                    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;"><span style="font-family:'Kanit',sans-serif;font-weight:700;font-size:24px;">{{ p.pct }}%</span><span style="font-size:11px;font-weight:600;color:oklch(0.5 0.04 258);">สำเร็จ</span></div>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid oklch(0.93 0.01 250);"><span style="width:14px;height:14px;border-radius:50%;background:oklch(0.62 0.16 150);flex:none;"></span><span style="flex:1;font-size:14.5px;font-weight:600;">เสร็จแล้ว</span><span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:20px;line-height:1.3;">{{ p.done }}</span></div>
+                    <div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid oklch(0.93 0.01 250);"><span style="width:14px;height:14px;border-radius:50%;background:oklch(0.8 0.15 80);flex:none;"></span><span style="flex:1;font-size:14.5px;font-weight:600;">กำลังทำ</span><span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:20px;line-height:1.3;">{{ p.doing }}</span></div>
+                    <div style="display:flex;align-items:center;gap:10px;padding:4px 0;"><span style="width:14px;height:14px;border-radius:50%;background:oklch(0.6 0.21 25);flex:none;"></span><span style="flex:1;font-size:14.5px;font-weight:600;">ค้าง / เกินกำหนด</span><span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:20px;line-height:1.3;color:oklch(0.55 0.21 25);">{{ p.stuck }}</span></div>
+                  </div>
+                </div>
+                <div onClick="{{ p.onImpact }}" style="margin:0 14px 10px;padding:10px 14px;border-radius:16px;background:{{ p.tint }};cursor:{{ p.cursor }};">
+                  <div style="font-size:13.5px;font-weight:700;color:{{ p.dark }};line-height:1.4;">ผลกระทบต่อโรงไฟฟ้า</div>
+                  <sc-for list="{{ p.impact }}" as="line" hint-placeholder-count="2">
+                    <div style="font-size:13.5px;line-height:1.45;">• {{ line }}</div>
+                  </sc-for>
+                </div>
+                <div style="margin:0 14px;padding:6px 14px;border-radius:999px;background:oklch(0.27 0.07 258);color:white;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <span style="font-family:'Kanit',sans-serif;font-weight:500;font-size:15px;line-height:1.4;">Top 5 P1 · {{ p.name }}</span>
+                  <sc-if value="{{ p.canEdit }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ p.onAdd }}" style="display:flex;align-items:center;gap:4px;border:0;cursor:pointer;padding:3px 10px;border-radius:999px;background:oklch(0.85 0.14 85);color:oklch(0.3 0.07 65);font-weight:700;font-size:12.5px;" style-hover="filter:brightness(1.06);"><span style="display:flex;">{{ ic.plus }}</span>เพิ่มงาน</button>
+                  </sc-if>
+                </div>
+                <div style="display:flex;flex-direction:column;padding:4px 0 6px;">
+                  <sc-for list="{{ p.top }}" as="j" hint-placeholder-count="5">
+                    <div onClick="{{ j.onClick }}" style="display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;padding:10px 16px;border-bottom:1px solid oklch(0.94 0.01 250);cursor:{{ j.cursor }};" style-hover="background:oklch(0.975 0.01 250);">
+                      <span style="width:26px;height:26px;border-radius:50%;background:{{ j.rankBg }};color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">{{ j.rank }}</span>
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                          <span style="font-size:14.5px;font-weight:700;line-height:1.4;text-wrap:pretty;">{{ j.issue }}</span>
+                          <span style="flex:none;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;line-height:1.4;background:{{ j.stBg }};color:{{ j.stFg }};">{{ j.stLabel }}</span>
+                        </div>
+                        <span style="font-size:13px;line-height:1.4;color:oklch(0.4 0.04 258);">→ {{ j.action }}</span>
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12.5px;line-height:1.4;">
+                          <span style="font-weight:700;">{{ j.owner }}</span>
+                          <span style="color:oklch(0.5 0.04 258);">{{ j.team }}</span>
+                          <span style="color:oklch(0.5 0.04 258);white-space:nowrap;">{{ j.range }}</span>
+                          <span style="font-weight:700;white-space:nowrap;color:{{ j.timeColor }};">{{ j.timeText }}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <div style="flex:1;height:8px;border-radius:999px;background:oklch(0.93 0.01 250);overflow:hidden;"><div style="height:100%;border-radius:999px;width:{{ j.w }};background:{{ j.bar }};"></div></div>
+                          <span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:14px;min-width:38px;text-align:right;">{{ j.progress }}%</span>
+                        </div>
+                        <div style="display:flex;align-items:flex-start;gap:8px;">
+                          <span style="flex:none;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap;line-height:1.4;background:{{ j.bBg }};color:{{ j.bFg }};"><span style="display:flex;">{{ j.bIcon }}</span>{{ j.bLabel }}</span>
+                          <span style="font-size:12.5px;line-height:1.4;color:oklch(0.4 0.04 258);text-wrap:pretty;">{{ j.note }}</span>
+                        </div>
+                        <sc-if value="{{ j.hasPhotos }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:2px;">
+                            <sc-for list="{{ j.photos }}" as="ph" hint-placeholder-count="0">
+                              <div onClick="{{ ph.open }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:zoom-in;">
+                                <div style="width:64px;height:48px;border-radius:12px;background-size:cover;background-position:center;border:2px solid oklch(0.93 0.01 250);background-image:{{ ph.bg }};"></div>
+                                <span style="font-size:10.5px;font-weight:600;color:oklch(0.5 0.04 258);line-height:1.3;">{{ ph.date }}</span>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ p.hasMore }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:8px 16px 2px;font-size:12.5px;font-weight:600;color:oklch(0.5 0.04 258);">{{ p.moreText }}</div>
+                  </sc-if>
+                </div>
+              </article>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:16px;">
+      <div style="background:white;border-radius:22px;overflow:hidden;box-shadow:0 4px 14px oklch(0.3 0.05 258 / 0.08);">
+        <div style="background:oklch(0.27 0.07 258);color:white;padding:8px 18px;font-family:'Kanit',sans-serif;font-weight:500;font-size:16px;line-height:1.4;">ปัญหาหน้างานที่ติดอยู่ (Blocker) · งานที่ยังไม่เสร็จทั้ง 4 โรง</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 22px;padding:16px 20px;">
+          <sc-for list="{{ blockerSummary }}" as="b" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:10px;min-width:130px;">
+              <span style="width:46px;height:46px;border-radius:50%;background:{{ b.bg }};color:{{ b.fg }};display:flex;align-items:center;justify-content:center;font-size:22px;flex:none;">{{ b.icon }}</span>
+              <div style="display:flex;flex-direction:column;line-height:1.3;">
+                <span style="font-size:13.5px;font-weight:600;">{{ b.label }}</span>
+                <span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:20px;color:{{ b.solid }};">{{ b.count }} <span style="font-size:13px;font-weight:500;">งาน</span></span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:white;border-radius:22px;overflow:hidden;box-shadow:0 4px 14px oklch(0.3 0.05 258 / 0.08);">
+        <div style="background:oklch(0.27 0.07 258);color:white;padding:8px 18px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 14px;font-family:'Kanit',sans-serif;font-weight:500;font-size:16px;line-height:1.4;">
+          <span>แนวโน้มงาน P1 (บันทึกทุกครั้งที่อัปเดต)</span>
+          <span style="display:flex;gap:12px;font-size:13px;font-family:'Anuphan',sans-serif;font-weight:600;">
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:oklch(0.62 0.16 150);"></span>เสร็จแล้ว</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:oklch(0.8 0.15 80);"></span>กำลังทำ</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:oklch(0.6 0.21 25);"></span>ค้าง</span>
+          </span>
+        </div>
+        <div style="padding:8px 16px 10px;">{{ trendChart }}</div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:oklch(0.27 0.07 258);color:white;padding:12px 28px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:14px;line-height:1.4;">
+    <span style="font-family:'Kanit',sans-serif;font-weight:500;font-size:16px;">“ซ่อมให้ทัน ลดความเสี่ยง รักษาความพร้อมของโรงไฟฟ้า”</span>
+    <span style="color:oklch(0.85 0.03 258);">% สำเร็จ = งานเสร็จ ÷ งาน P1 ทั้งหมดของโรง · ค้าง = ยังไม่เริ่ม หรือ เกินกำหนด</span>
+  </footer>
+
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed;inset:0;background:oklch(0.2 0.05 258 / 0.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;">
+      <div onClick="{{ stop }}" style="background:white;border-radius:26px;width:min(720px,100%);max-height:calc(100vh - 40px);overflow:auto;box-shadow:0 20px 50px oklch(0.2 0.05 258 / 0.35);">
+        <div style="background:{{ modalColor }};color:white;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <span style="font-family:'Kanit',sans-serif;font-weight:600;font-size:20px;line-height:1.4;">{{ modalTitle }}</span>
+          <button onClick="{{ closeModal }}" style="border:0;cursor:pointer;width:36px;height:36px;border-radius:50%;background:oklch(1 0 0 / 0.2);color:white;display:flex;align-items:center;justify-content:center;font-size:18px;" style-hover="background:oklch(1 0 0 / 0.32);">{{ ic.x }}</button>
+        </div>
+
+        <sc-if value="{{ isPlantModal }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 22px;display:flex;flex-direction:column;gap:6px;">
+            <label style="font-size:13.5px;font-weight:700;">ผลกระทบต่อโรงไฟฟ้า (1 บรรทัด = 1 ข้อ)</label>
+            <textarea value="{{ draft.impactText }}" onChange="{{ set.impactText }}" rows="4" style="border:2px solid oklch(0.9 0.01 250);border-radius:16px;padding:10px 14px;font-size:15px;line-height:1.5;resize:vertical;"></textarea>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isJobModal }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px;">
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">โรงไฟฟ้า</label>
+              <select value="{{ draft.plant }}" onChange="{{ set.plant }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;background:white;"><option value="5">โรงไฟฟ้า 5</option><option value="10">โรงไฟฟ้า 10</option><option value="6">โรงไฟฟ้า 6</option><option value="11">โรงไฟฟ้า 11</option></select></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">ลำดับความสำคัญ (1 = สำคัญสุด)</label>
+              <input type="number" min="1" value="{{ draft.rank }}" onChange="{{ set.rank }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;grid-column:1/-1;"><label style="font-size:13.5px;font-weight:700;">1. ปัญหาเครื่องจักร</label>
+              <input value="{{ draft.issue }}" onChange="{{ set.issue }}" placeholder="เช่น Boiler Feed Pump B สั่นสูง" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;grid-column:1/-1;"><label style="font-size:13.5px;font-weight:700;">2. แนวทางดำเนินงาน</label>
+              <input value="{{ draft.action }}" onChange="{{ set.action }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">3. ผู้รับผิดชอบ</label>
+              <input value="{{ draft.owner }}" onChange="{{ set.owner }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">แผนก / ทีม</label>
+              <input value="{{ draft.team }}" onChange="{{ set.team }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">4. วันเริ่ม</label>
+              <input type="date" value="{{ draft.start }}" onChange="{{ set.start }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:8px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">วันกำหนดเสร็จ</label>
+              <input type="date" value="{{ draft.end }}" onChange="{{ set.end }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:8px 14px;font-size:15px;"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;grid-column:1/-1;"><label style="font-size:13.5px;font-weight:700;">5. ความคืบหน้า · {{ draft.progress }}%</label>
+              <input type="range" min="0" max="100" step="5" value="{{ draft.progress }}" onChange="{{ set.progress }}" style="width:100%;accent-color:oklch(0.52 0.17 255);"></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">สถานะ</label>
+              <select value="{{ draft.status }}" onChange="{{ set.status }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;background:white;"><option value="pending">ยังไม่เริ่ม</option><option value="doing">กำลังทำ</option><option value="done">เสร็จแล้ว</option></select></div>
+            <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:13.5px;font-weight:700;">6. ติดปัญหาอะไร</label>
+              <select value="{{ draft.blocker }}" onChange="{{ set.blocker }}" style="border:2px solid oklch(0.9 0.01 250);border-radius:999px;padding:9px 14px;font-size:15px;background:white;"><option value="none">ไม่ติดปัญหา</option><option value="part">รออะไหล่</option><option value="permit">รอ Permit</option><option value="manpower">ขาดกำลังคน</option><option value="shutdown">รอหยุดเครื่อง</option><option value="vendor">รอผู้รับเหมา</option><option value="budget">รออนุมัติงบ</option></select></div>
+            <div style="display:flex;flex-direction:column;gap:5px;grid-column:1/-1;"><label style="font-size:13.5px;font-weight:700;">รายละเอียดปัญหาหน้างาน (ทำไมทำไม่ได้)</label>
+              <textarea value="{{ draft.note }}" onChange="{{ set.note }}" rows="2" style="border:2px solid oklch(0.9 0.01 250);border-radius:16px;padding:10px 14px;font-size:15px;line-height:1.5;resize:vertical;"></textarea></div>
+            <div style="display:flex;flex-direction:column;gap:8px;grid-column:1/-1;"><label style="font-size:13.5px;font-weight:700;">7. รูปภาพหน้างาน (สูงสุด 4 รูป · ลงวันที่ถ่ายอัตโนมัติ)</label>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                <sc-for list="{{ draftPhotos }}" as="ph" hint-placeholder-count="0">
+                  <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;">
+                    <div style="width:120px;height:90px;border-radius:16px;background-size:cover;background-position:center;background-image:{{ ph.bg }};"></div>
+                    <span style="font-size:11.5px;font-weight:600;color:oklch(0.5 0.04 258);">{{ ph.date }}</span>
+                    <button onClick="{{ ph.remove }}" style="position:absolute;top:-6px;right:-6px;width:26px;height:26px;border-radius:50%;border:2px solid white;cursor:pointer;background:oklch(0.6 0.21 25);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;padding:0;" style-hover="background:oklch(0.52 0.21 25);">{{ ic.x }}</button>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ canAddPhoto }}" hint-placeholder-val="{{ true }}">
+                  <label style="width:120px;height:90px;border-radius:16px;border:2px dashed oklch(0.75 0.08 255);background:oklch(0.97 0.02 255);color:oklch(0.45 0.15 255);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:13px;font-weight:700;" style-hover="background:oklch(0.94 0.04 255);">
+                    <span style="display:flex;font-size:24px;">{{ ic.camera }}</span>{{ photoBtnText }}
+                    <input type="file" accept="image/*" multiple="multiple" onChange="{{ addPhotos }}" style="display:none;">
+                  </label>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="padding:4px 22px 20px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;">
+          <div>
+            <sc-if value="{{ canDelete }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ deleteJob }}" style="border:0;cursor:pointer;padding:11px 18px;border-radius:999px;background:oklch(0.95 0.04 25);color:oklch(0.5 0.19 25);font-weight:700;font-size:14px;" style-hover="background:oklch(0.91 0.07 25);">ลบงานนี้</button>
+            </sc-if>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button onClick="{{ closeModal }}" style="border:0;cursor:pointer;padding:11px 20px;border-radius:999px;background:oklch(0.94 0.01 250);color:oklch(0.3 0.04 258);font-weight:700;font-size:14px;" style-hover="background:oklch(0.9 0.01 250);">ยกเลิก</button>
+            <button onClick="{{ saveModal }}" style="border:0;cursor:pointer;padding:11px 24px;border-radius:999px;background:oklch(0.62 0.16 150);color:white;font-weight:700;font-size:14px;" style-hover="background:oklch(0.56 0.16 150);">บันทึก</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ lightboxOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeLightbox }}" style="position:fixed;inset:0;background:oklch(0.15 0.04 258 / 0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;z-index:60;cursor:zoom-out;">
+      {{ lightboxImg }}
+      <span style="color:white;font-size:16px;font-weight:600;text-align:center;line-height:1.4;">{{ lightbox.caption }}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;all&quot;,&quot;5-10&quot;,&quot;6-11&quot;],&quot;default&quot;:&quot;all&quot;,&quot;tsType&quot;:&quot;'all'|'5-10'|'6-11'&quot;}}">
+const KEY = 'p1dash.v2';
+const h = React.createElement;
+const P = {
+  factory: ['M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z', 'M17 18h1', 'M12 18h1', 'M7 18h1'],
+  calendar: ['M8 2v4', 'M16 2v4', 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M3 10h18'],
+  pencil: ['M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z'],
+  check: ['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'm9 11 3 3L22 4'],
+  clock: ['M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0', 'M12 6v6l4 2'],
+  alert: ['m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z', 'M12 9v4', 'M12 17h.01'],
+  zap: ['M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z'],
+  plus: ['M5 12h14', 'M12 5v14'],
+  x: ['M18 6 6 18', 'm6 6 12 12'],
+  download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
+  upload: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M17 8l-5-5-5 5', 'M12 3v12'],
+  part: ['M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', 'M3.27 6.96 12 12.01l8.73-5.05', 'M12 22.08V12'],
+  permit: ['M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z', 'M14 2v6h6', 'm9 15 2 2 4-4'],
+  manpower: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+  shutdown: ['M12 2v10', 'M18.4 6.6a9 9 0 1 1-12.77.04'],
+  vendor: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
+  chevron: ['m6 9 6 6 6-6'],
+  filter: ['M22 3H2l8 9.46V19l4 2v-8.54L22 3z'],
+  camera: ['M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z', 'M15 13a3 3 0 1 1-6 0 3 3 0 0 1 6 0'],
+  budget: ['M2 8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z', 'M14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0', 'M6 12h.01M18 12h.01'],
+};
+const IC = Object.fromEntries(Object.entries(P).map(([k, ds]) => [k, h('svg', { width: '1em', height: '1em', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' }, ds.map((d, i) => h('path', { key: i, d })))]));
+IC.none = IC.check;
+
+const DONE = 'oklch(0.62 0.16 150)', DOING = 'oklch(0.8 0.15 80)', STUCK = 'oklch(0.6 0.21 25)';
+const PLANT_META = {
+  5: { color: 'oklch(0.52 0.17 255)', tint: 'oklch(0.95 0.03 255)', dark: 'oklch(0.42 0.15 255)' },
+  10: { color: 'oklch(0.63 0.19 45)', tint: 'oklch(0.95 0.04 55)', dark: 'oklch(0.5 0.16 45)' },
+  6: { color: 'oklch(0.55 0.14 160)', tint: 'oklch(0.95 0.035 160)', dark: 'oklch(0.44 0.12 160)' },
+  11: { color: 'oklch(0.5 0.19 295)', tint: 'oklch(0.95 0.03 295)', dark: 'oklch(0.42 0.17 295)' },
+};
+const BLOCK = {
+  part: { label: 'รออะไหล่', solid: 'oklch(0.6 0.19 42)', fg: 'white' },
+  permit: { label: 'รอ Permit', solid: 'oklch(0.78 0.15 80)', fg: 'oklch(0.3 0.07 65)' },
+  manpower: { label: 'ขาดกำลังคน', solid: 'oklch(0.55 0.19 300)', fg: 'white' },
+  shutdown: { label: 'รอหยุดเครื่อง', solid: 'oklch(0.45 0.05 258)', fg: 'white' },
+  vendor: { label: 'รอผู้รับเหมา', solid: 'oklch(0.55 0.16 250)', fg: 'white' },
+  budget: { label: 'รออนุมัติงบ', solid: 'oklch(0.55 0.1 195)', fg: 'white' },
+  none: { label: 'ไม่ติดปัญหา', solid: 'oklch(0.93 0.06 150)', fg: 'oklch(0.42 0.12 150)' },
+};
+const FILTERS = [
+  { k: 'all', label: 'ทั้งหมด 4 โรง', ids: [5, 10, 6, 11] },
+  { k: '5-10', label: 'กลุ่ม 1 · โรง 5+10', ids: [5, 10] },
+  { k: '6-11', label: 'กลุ่ม 2 · โรง 6+11', ids: [6, 11] },
+  { k: '5', label: 'โรง 5', ids: [5] }, { k: '10', label: 'โรง 10', ids: [10] },
+  { k: '6', label: 'โรง 6', ids: [6] }, { k: '11', label: 'โรง 11', ids: [11] },
+];
+const shrink = file => new Promise((res, rej) => { const r = new FileReader(); r.onerror = rej; r.onload = () => { const im = new Image(); im.onerror = rej; im.onload = () => { const s = Math.min(1, 720 / Math.max(im.width, im.height)); const cv = document.createElement('canvas'); cv.width = Math.round(im.width * s); cv.height = Math.round(im.height * s); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); res(cv.toDataURL('image/jpeg', 0.72)); }; im.src = r.result; }; r.readAsDataURL(file); });
+const TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const pd = s => { const [y, m, d] = (s || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const thD = d => `${d.getDate()} ${TH_M[d.getMonth()]}`;
+const range = (a, b) => { const x = pd(a), y = pd(b); return x.getMonth() === y.getMonth() ? `${x.getDate()}–${thD(y)}` : `${thD(x)}–${thD(y)}`; };
+const today0 = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+
+let _id = 100;
+const J = (plant, rank, issue, action, owner, team, start, end, progress, status, blocker, note) => ({ id: 'j' + (_id++), plant, rank, issue, action, owner, team, start, end, progress, status, blocker, note });
+const SEED = () => ({
+  updatedAt: new Date().toISOString(),
+  plants: {
+    5: { impact: ['เสี่ยงลดกำลังผลิต ~30 MW หาก BFP B ไม่พร้อม', 'ประสิทธิภาพ Boiler ลดจาก Air Preheater รั่ว'] },
+    10: { impact: ['เสี่ยง Trip จาก Generator Transformer', 'Coal Mill C ไม่พร้อม ผลิตได้ไม่เต็มกำลัง'] },
+    6: { impact: ['กระทบการเดินเครื่อง GT หาก Combustor ผิดปกติ', 'เสี่ยงไฟดับบัส 6.9 kV'] },
+    11: { impact: ['เสี่ยงต้องลดโหลด Steam Turbine', 'Economizer รั่วต่อเนื่อง สูญเสียน้ำ'] },
+  },
+  jobs: [
+    J(5, 1, 'Boiler Feed Pump B สั่นสูงเกินเกณฑ์', 'เปลี่ยน Bearing + Alignment ใหม่', 'สมชาย ก.', 'เครื่องกล', '2026-10-01', '2026-10-10', 60, 'doing', 'part', 'Bearing จากผู้ผลิตยังไม่ถึง คาดส่ง 5 ต.ค.'),
+    J(5, 2, 'Air Preheater Seal รั่ว', 'เปลี่ยน Radial Seal ทั้งชุด', 'วิชัย ส.', 'ทีม Boiler', '2026-09-20', '2026-10-05', 35, 'doing', 'shutdown', 'ต้องลดโหลด รอศูนย์ควบคุมอนุมัติช่วงเวลา'),
+    J(5, 3, 'ID Fan A Bearing อุณหภูมิสูง 92°C', 'ตรวจ Lube Oil + เปลี่ยน Oil Cooler', 'ประยุทธ ม.', 'เครื่องกล', '2026-09-25', '2026-10-03', 80, 'doing', 'none', ''),
+    J(5, 4, 'HP Bypass Control Valve ค้าง', 'Overhaul Actuator และ Positioner', 'นภา ร.', 'C&I', '2026-09-28', '2026-10-12', 20, 'doing', 'vendor', 'ออก PO แล้ว รอผู้รับเหมาเข้าหน้างาน'),
+    J(5, 5, 'Condenser Vacuum ต่ำกว่าเกณฑ์', 'Helium Leak Test หาจุดรั่ว', 'อนันต์ พ.', 'Performance', '2026-09-15', '2026-09-30', 100, 'done', 'none', ''),
+    J(5, 6, 'Service Air Compressor รั่ว', 'เปลี่ยน Gasket และ Valve', 'อนุชา ร.', 'เครื่องกล', '2026-09-10', '2026-09-18', 100, 'done', 'none', ''),
+    J(5, 7, 'Ash Handling Valve ติดขัด', 'ถอดล้างและเปลี่ยน Seat', 'สมพร ด.', 'ทีม Boiler', '2026-09-12', '2026-09-20', 100, 'done', 'none', ''),
+    J(10, 1, 'Generator Transformer ค่า DGA สูงผิดปกติ', 'Oil Filtering + ทดสอบ DGA ซ้ำ', 'ธนพล จ.', 'ไฟฟ้า', '2026-09-22', '2026-10-08', 45, 'doing', 'vendor', 'รถ Filter ของผู้รับเหมาติดคิวงานโรงอื่น'),
+    J(10, 2, 'Coal Mill C ลูกบดสึก', 'เปลี่ยน Grinding Roller', 'สุริยา ท.', 'เครื่องกล', '2026-10-01', '2026-10-20', 10, 'pending', 'part', 'Roller ยังไม่ถึง (Lead time 6 สัปดาห์)'),
+    J(10, 3, 'DCS Controller สำรองไม่ Sync', 'Update Firmware + ทดสอบ Redundancy', 'พรทิพย์ น.', 'C&I', '2026-09-20', '2026-09-29', 70, 'doing', 'shutdown', 'ทดสอบ Switch-over ได้เฉพาะตอนหยุดเครื่อง'),
+    J(10, 4, 'Cooling Water Pump 2 Seal รั่ว', 'เปลี่ยน Mechanical Seal', 'กิตติ ว.', 'เครื่องกล', '2026-09-26', '2026-10-02', 90, 'doing', 'none', ''),
+    J(10, 5, 'Soot Blower 12 ติดขัด', 'ซ่อม Gearbox และ Lance', 'ชาตรี บ.', 'ทีม Boiler', '2026-09-29', '2026-10-10', 0, 'pending', 'budget', 'รออนุมัติ PR ค่าอะไหล่ Gearbox'),
+    J(10, 6, 'Conveyor Belt C3 ขาด', 'ต่อ Belt แบบ Hot Splice', 'วรวุฒิ ส.', 'เครื่องกล', '2026-09-14', '2026-09-19', 100, 'done', 'none', ''),
+    J(6, 1, 'Gas Turbine Exhaust Temp Spread สูง', 'Borescope ตรวจ Combustor', 'ณัฐวุฒิ ศ.', 'GT Team', '2026-09-24', '2026-10-06', 55, 'doing', 'permit', 'รอ Permit เข้าพื้นที่อับอากาศ (Confined Space)'),
+    J(6, 2, 'Circuit Breaker 6.9 kV Trip ไม่ทราบสาเหตุ', 'ทดสอบ Protection Relay และ Timing', 'อรุณ ช.', 'ไฟฟ้า', '2026-09-18', '2026-09-27', 60, 'doing', 'vendor', 'รอผู้เชี่ยวชาญ Relay จากผู้ผลิต'),
+    J(6, 3, 'HRSG HP Drum Level Transmitter แกว่ง', 'เปลี่ยน Transmitter + Calibrate', 'ศิริพร ล.', 'C&I', '2026-09-27', '2026-10-01', 85, 'doing', 'none', ''),
+    J(6, 4, 'Inlet Air Filter อุดตัน ΔP สูง', 'เปลี่ยน Filter Cartridge 50%', 'วีระ ด.', 'GT Team', '2026-10-01', '2026-10-07', 15, 'pending', 'part', 'Cartridge ส่งมาไม่ครบ ขาด 120 ชิ้น'),
+    J(6, 5, 'Fuel Gas Filter ΔP สูง', 'เปลี่ยน Filter Element', 'มานพ ย.', 'เครื่องกล', '2026-09-20', '2026-09-28', 100, 'done', 'none', ''),
+    J(6, 6, 'Lube Oil Cooler รั่ว', 'Plug Tube + Pressure Test', 'เอกชัย พ.', 'เครื่องกล', '2026-09-08', '2026-09-15', 100, 'done', 'none', ''),
+    J(6, 7, 'Fire Protection Pump ไม่ Auto Start', 'ตรวจ Pressure Switch', 'ปรีชา ว.', 'C&I', '2026-09-11', '2026-09-16', 100, 'done', 'none', ''),
+    J(11, 1, 'Steam Turbine Bearing 3 Vibration สูง', 'Balancing + ตรวจ Alignment', 'ปิยะ ห.', 'เครื่องกล', '2026-09-15', '2026-09-28', 40, 'doing', 'shutdown', 'ต้องหยุดเครื่อง ≥3 วัน ยังไม่ได้ช่วงเวลา'),
+    J(11, 2, 'Economizer Tube รั่ว', 'เชื่อมซ่อม + ตรวจ NDT', 'สมศักดิ์ อ.', 'ทีม Boiler', '2026-09-26', '2026-10-04', 65, 'doing', 'manpower', 'ช่างเชื่อม Certified ไม่พอ (ได้ 2 จาก 4 คน)'),
+    J(11, 3, 'Feedwater Heater 6 Level Control ผิดปกติ', 'ตรวจ Level Switch + Drain Valve', 'จิราพร ค.', 'C&I', '2026-09-23', '2026-09-29', 75, 'doing', 'part', 'รอ Valve Trim สำรองจากคลัง'),
+    J(11, 4, 'Cooling Tower Fan 4 Gearbox เสียงดัง', 'เปลี่ยน Gearbox', 'บุญมี ส.', 'เครื่องกล', '2026-10-01', '2026-10-15', 0, 'pending', 'budget', 'รออนุมัติงบซื้อ Gearbox ใหม่'),
+    J(11, 5, 'Battery Charger 220 VDC Alarm', 'เปลี่ยน Rectifier Module', 'ธีระ ป.', 'ไฟฟ้า', '2026-09-29', '2026-10-03', 50, 'doing', 'none', ''),
+    J(11, 6, 'Condensate Pump A Strainer อุดตัน', 'ถอดล้าง Strainer', 'ไพโรจน์ ก.', 'เครื่องกล', '2026-09-09', '2026-09-12', 100, 'done', 'none', ''),
+  ],
+  history: [
+    { date: '2026-09-09', done: 4, doing: 13, stuck: 9 },
+    { date: '2026-09-16', done: 6, doing: 12, stuck: 8 },
+    { date: '2026-09-23', done: 7, doing: 11, stuck: 8 },
+  ],
+});
+const load = () => { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.jobs) return s; } catch (e) {} return SEED(); };
+
+class Component extends DCLogic {
+  state = { data: load(), editMode: false, modal: null, draft: {}, now: new Date(), filter: null, lightbox: null };
+  fileRef = React.createRef();
+  componentDidMount() { this.t = setInterval(() => this.setState({ now: new Date() }), 30000); }
+  componentWillUnmount() { clearInterval(this.t); }
+
+  bucket(j, t) { if (j.status === 'done') return 'done'; if (j.status === 'pending' || pd(j.end) < t) return 'stuck'; return 'doing'; }
+  counts(jobs, t) { const c = { done: 0, doing: 0, stuck: 0 }; jobs.forEach(j => c[this.bucket(j, t)]++); return c; }
+  commit(data) {
+    const t = today0(), c = this.counts(data.jobs, t), d = iso(t);
+    const p = Object.fromEntries([5, 10, 6, 11].map(id => [id, this.counts(data.jobs.filter(j => j.plant === id), t)]));
+    const history = (data.history || []).filter(x => x.date !== d).concat([{ date: d, ...c, p }]).sort((a, b) => a.date.localeCompare(b.date)).slice(-12);
+    const next = { ...data, history, updatedAt: new Date().toISOString() };
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch (e) { alert('พื้นที่จัดเก็บในเครื่องเต็ม กรุณาลบรูปเก่าบางรูป หรือส่งออกไฟล์เก็บไว้ก่อน'); }
+    this.setState({ data: next, modal: null });
+  }
+  openJob(j) { this.setState({ modal: 'job', draft: { ...j, plant: String(j.plant) } }); }
+  openNew(pid) {
+    const t = today0(), e = new Date(t); e.setDate(e.getDate() + 7);
+    const rank = this.state.data.jobs.filter(j => j.plant === pid).length + 1;
+    this.setState({ modal: 'job', draft: { id: null, plant: String(pid), rank, issue: '', action: '', owner: '', team: '', start: iso(t), end: iso(e), progress: 0, status: 'pending', blocker: 'none', note: '', photos: [] } });
+  }
+  openPlant(pid) { this.setState({ modal: 'plant', draft: { pid, impactText: (this.state.data.plants[pid]?.impact || []).join('\n') } }); }
+  setField(k, v) {
+    this.setState(s => {
+      const d = { ...s.draft, [k]: v };
+      if (k === 'progress') { d.progress = +v; if (d.progress >= 100) d.status = 'done'; else if (d.status === 'done') d.status = 'doing'; else if (d.progress > 0 && d.status === 'pending') d.status = 'doing'; }
+      if (k === 'status' && v === 'done') d.progress = 100;
+      if (k === 'rank') d.rank = Math.max(1, parseInt(v) || 1);
+      return { draft: d };
+    });
+  }
+  async addPhotos(e) {
+    const files = [...e.target.files]; e.target.value = '';
+    const room = 4 - (this.state.draft.photos || []).length;
+    const d = iso(today0()), out = [];
+    for (const f of files.slice(0, room)) { try { out.push({ src: await shrink(f), date: d }); } catch (err) {} }
+    this.setState(s => ({ draft: { ...s.draft, photos: (s.draft.photos || []).concat(out) } }));
+  }
+  save() {
+    const { data, draft, modal } = this.state;
+    if (modal === 'plant') {
+      const impact = draft.impactText.split('\n').map(s => s.trim()).filter(Boolean);
+      return this.commit({ ...data, plants: { ...data.plants, [draft.pid]: { ...data.plants[draft.pid], impact } } });
+    }
+    if (!draft.issue.trim()) return alert('กรุณากรอกปัญหาเครื่องจักร');
+    const job = { ...draft, plant: +draft.plant, progress: +draft.progress, id: draft.id || 'j' + Date.now() };
+    const jobs = draft.id ? data.jobs.map(j => j.id === draft.id ? job : j) : data.jobs.concat([job]);
+    this.commit({ ...data, jobs });
+  }
+
+  plant(pid, t, edit) {
+    const meta = PLANT_META[pid], data = this.state.data;
+    const all = data.jobs.filter(j => j.plant === pid);
+    const c = this.counts(all, t), total = all.length || 1, C = 2 * Math.PI * 40;
+    const seg = (n, off) => [`${C * n / total} ${C}`, `${-C * off / total}`];
+    const [d1, o1] = seg(c.done, 0), [d2, o2] = seg(c.doing, c.done), [d3, o3] = seg(c.stuck, c.done + c.doing);
+    const sorted = [...all].sort((a, b) => ((a.status === 'done') - (b.status === 'done')) || a.rank - b.rank);
+    const top = sorted.slice(0, 5).map((j, i) => {
+      const b = this.bucket(j, t), days = Math.round((pd(j.end) - t) / 864e5), bl = BLOCK[j.blocker] || BLOCK.none;
+      const overdue = j.status !== 'done' && days < 0;
+      let stLabel = { done: 'เสร็จแล้ว', doing: 'กำลังทำ', pending: 'ยังไม่เริ่ม' }[j.status];
+      let stBg = { done: 'oklch(0.93 0.06 150)', doing: 'oklch(0.95 0.08 85)', pending: 'oklch(0.94 0.05 25)' }[j.status];
+      let stFg = { done: 'oklch(0.42 0.12 150)', doing: 'oklch(0.45 0.1 65)', pending: 'oklch(0.5 0.19 25)' }[j.status];
+      if (overdue) { stLabel = 'เกินกำหนด'; stBg = STUCK; stFg = 'white'; }
+      const timeText = j.status === 'done' ? 'ปิดงานแล้ว' : days < 0 ? `เกิน ${-days} วัน` : days === 0 ? 'ครบกำหนดวันนี้' : `เหลือ ${days} วัน`;
+      const timeColor = j.status === 'done' ? 'oklch(0.5 0.15 150)' : days <= 0 ? 'oklch(0.55 0.21 25)' : days <= 2 ? 'oklch(0.55 0.13 70)' : 'oklch(0.45 0.04 258)';
+      return { ...j, rank: i + 1, range: range(j.start, j.end), timeText, timeColor, stLabel, stBg, stFg,
+        w: j.progress + '%', bar: b === 'done' ? DONE : b === 'stuck' ? STUCK : DOING,
+        rankBg: overdue ? STUCK : meta.color, bBg: bl.solid, bFg: bl.fg, bLabel: bl.label, bIcon: IC[j.blocker] || IC.none,
+        photos: (j.photos || []).map(ph => ({ src: ph.src, bg: `url("${ph.src}")`, date: thD(pd(ph.date)), open: e => { e.stopPropagation(); this.setState({ lightbox: { src: ph.src, caption: `โรงไฟฟ้า ${pid} · ${j.issue} · ${thD(pd(ph.date))}` } }); } })),
+        hasPhotos: !!(j.photos && j.photos.length),
+        note: j.blocker === 'none' && !j.note ? (j.status === 'done' ? '' : 'ดำเนินการได้ตามแผน') : j.note,
+        cursor: edit ? 'pointer' : 'default', onClick: edit ? () => this.openJob(j) : undefined };
+    });
+    const more = all.length - top.length;
+    return { name: 'โรงไฟฟ้า ' + pid, ...meta, total: all.length, ...c, pct: Math.round(c.done / total * 100), d1, o1, d2, o2, d3, o3,
+      impact: data.plants[pid]?.impact || [], top, hasMore: more > 0, moreText: `+ อีก ${more} งาน (${sorted.slice(5).filter(j => j.status === 'done').length} งานเสร็จแล้ว)`,
+      canEdit: edit, cursor: edit ? 'pointer' : 'default', onImpact: edit ? () => this.openPlant(pid) : undefined, onAdd: e => { e.stopPropagation(); this.openNew(pid); } };
+  }
+
+  trend(hist) {
+    const W = 560, H = 150, L = 30, R = 10, T = 10, B = 26;
+    const max = Math.max(4, ...hist.map(p => Math.max(p.done, p.doing, p.stuck))) + 1;
+    const x = i => L + (hist.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (hist.length - 1));
+    const y = v => T + (H - T - B) * (1 - v / max);
+    const kids = [];
+    [0, Math.round(max / 2), max].forEach((v, i) => { kids.push(h('line', { key: 'g' + i, x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: 'oklch(0.93 0.01 250)' }), h('text', { key: 'gt' + i, x: L - 8, y: y(v) + 4, fontSize: 11, textAnchor: 'end', fill: 'oklch(0.55 0.03 258)' }, v)); });
+    [['done', DONE], ['doing', DOING], ['stuck', STUCK]].forEach(([k, col]) => {
+      kids.push(h('polyline', { key: k, points: hist.map((p, i) => `${x(i)},${y(p[k])}`).join(' '), fill: 'none', stroke: col, strokeWidth: 3, strokeLinejoin: 'round', strokeLinecap: 'round' }));
+      hist.forEach((p, i) => kids.push(h('circle', { key: k + i, cx: x(i), cy: y(p[k]), r: 4.5, fill: col, stroke: 'white', strokeWidth: 2 })));
+    });
+    hist.forEach((p, i) => kids.push(h('text', { key: 'x' + i, x: x(i), y: H - 6, fontSize: 11.5, textAnchor: 'middle', fill: 'oklch(0.45 0.04 258)', fontWeight: 600 }, thD(pd(p.date)))));
+    return h('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', style: { display: 'block', maxHeight: 170, fontFamily: 'Anuphan, sans-serif' } }, kids);
+  }
+
+  renderVals() {
+    const { data, editMode, modal, draft, now } = this.state;
+    const t = today0(), view = this.state.filter ?? this.props.view ?? 'all';
+    const ids = (FILTERS.find(x => x.k === view) || FILTERS[0]).ids;
+    const jobs = data.jobs.filter(j => ids.includes(j.plant));
+    const c = this.counts(jobs, t), total = jobs.length || 1;
+    const pc = n => Math.round(n / total * 100);
+    const defs = [{ k: '5-10', title: 'กลุ่ม 1 · โรงไฟฟ้า 5 และ 10', ids: [5, 10] }, { k: '6-11', title: 'กลุ่ม 2 · โรงไฟฟ้า 6 และ 11', ids: [6, 11] }].map(g => ({ ...g, ids: g.ids.filter(i => ids.includes(i)) })).filter(g => g.ids.length).map(g => g.ids.length === 1 ? { ...g, title: 'มุมมองรายโรง · โรงไฟฟ้า ' + g.ids[0] } : g);
+    const groups = defs.map(g => { const plants = g.ids.map(id => this.plant(id, t, editMode)); const tt = plants.reduce((s, p) => s + p.total, 0), dn = plants.reduce((s, p) => s + p.done, 0); return { title: g.title, note: `สำเร็จรวม ${Math.round(dn / (tt || 1) * 100)}% · เสร็จ ${dn}/${tt} งาน`, plants }; });
+
+    const open = jobs.filter(j => j.status !== 'done');
+    const bc = {}; open.forEach(j => { if (j.blocker && j.blocker !== 'none') bc[j.blocker] = (bc[j.blocker] || 0) + 1; });
+    const blockerSummary = Object.entries(bc).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ label: BLOCK[k].label, count: n, bg: BLOCK[k].solid, fg: BLOCK[k].fg, solid: k === 'permit' ? 'oklch(0.55 0.13 70)' : BLOCK[k].solid, icon: IC[k] }));
+    const risk = ids.map(id => ({ id, n: this.counts(data.jobs.filter(j => j.plant === id), t).stuck })).sort((a, b) => b.n - a.n);
+    const overdue = open.filter(j => pd(j.end) < t).sort((a, b) => pd(a.end) - pd(b.end));
+    const highlights = [
+      { k: `P1 ทั้งหมด ${jobs.length} งาน`, v: `· เสร็จ ${c.done} (${pc(c.done)}%) · กำลังทำ ${c.doing} (${pc(c.doing)}%) · ค้าง ${c.stuck} (${pc(c.stuck)}%)` },
+      { k: 'โรงที่เสี่ยงสุด:', v: risk.filter(r => r.n > 0).slice(0, 2).map(r => `โรง ${r.id} (ค้าง ${r.n} งาน)`).join(' และ ') || 'ไม่มีงานค้าง' },
+      { k: 'ติดปัญหาหลัก:', v: blockerSummary.slice(0, 3).map(b => `${b.label} ${b.count} งาน`).join(' · ') || 'ไม่มี' },
+      { k: 'เกินกำหนด:', v: overdue.length ? `${overdue.length} งาน · นานสุด โรง ${overdue[0].plant} ${overdue[0].issue} (เกิน ${Math.round((t - pd(overdue[0].end)) / 864e5)} วัน)` : 'ไม่มีงานเกินกำหนด' },
+    ];
+    const hp = x => ids.length === 4 ? x : x.p ? ids.reduce((s, i) => { const q = x.p[i] || {}; return { date: x.date, done: s.done + (q.done || 0), doing: s.doing + (q.doing || 0), stuck: s.stuck + (q.stuck || 0) }; }, { date: x.date, done: 0, doing: 0, stuck: 0 }) : null;
+    const hist = (data.history || []).filter(x => x.date !== iso(t)).map(hp).filter(Boolean).concat([{ date: iso(t), ...c }]).slice(-8);
+    const up = new Date(data.updatedAt);
+    const set = Object.fromEntries(['plant', 'rank', 'issue', 'action', 'owner', 'team', 'start', 'end', 'progress', 'status', 'blocker', 'note', 'impactText'].map(k => [k, e => this.setField(k, e.target.value)]));
+    const pmeta = PLANT_META[modal === 'plant' ? draft.pid : draft.plant] || PLANT_META[5];
+
+    return {
+      ic: IC, editMode,
+      nowText: `${thD(now)} ${now.getFullYear() + 543} · ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`,
+      updatedText: `${thD(up)} ${String(up.getHours()).padStart(2, '0')}:${String(up.getMinutes()).padStart(2, '0')} น.`,
+      editBtnText: editMode ? 'เสร็จสิ้นการแก้ไข' : 'อัปเดตงานประจำวัน',
+      editBtnBg: editMode ? DONE : 'oklch(0.85 0.14 85)', editBtnFg: editMode ? 'white' : 'oklch(0.3 0.07 65)',
+      toggleEdit: () => this.setState(s => ({ editMode: !s.editMode })),
+      kpi: { plants: ids.length, total: jobs.length, ...c, donePct: pc(c.done), doingPct: pc(c.doing), stuckPct: pc(c.stuck) },
+      filterValue: view, onFilter: e => this.setState({ filter: e.target.value }),
+      filterColor: ids.length === 1 ? PLANT_META[ids[0]].color : 'oklch(0.27 0.07 258)',
+      filters: FILTERS.map(x => { const on = x.k === view, col = x.ids.length === 1 ? PLANT_META[x.ids[0]].color : 'oklch(0.27 0.07 258)';
+        return { label: x.label, dot: on ? 'white' : col, border: col, bg: on ? col : 'white', fg: on ? 'white' : 'oklch(0.3 0.05 258)', onClick: () => this.setState({ filter: x.k }) }; }),
+      draftPhotos: (draft.photos || []).map((ph, i) => ({ src: ph.src, bg: `url("${ph.src}")`, date: thD(pd(ph.date)), remove: () => this.setState(s => ({ draft: { ...s.draft, photos: s.draft.photos.filter((_, k) => k !== i) } })) })),
+      canAddPhoto: (draft.photos || []).length < 4, photoBtnText: (draft.photos || []).length ? 'เพิ่มรูป' : 'อัปโหลดรูป',
+      addPhotos: e => this.addPhotos(e),
+      lightboxOpen: !!this.state.lightbox, lightboxImg: this.state.lightbox ? h('img', { src: this.state.lightbox.src, alt: '', style: { maxWidth: '100%', maxHeight: 'calc(100vh - 110px)', borderRadius: 20, display: 'block' } }) : null, lightbox: this.state.lightbox || {}, closeLightbox: () => this.setState({ lightbox: null }),
+      highlights, groups, blockerSummary, trendChart: this.trend(hist),
+      modalOpen: !!modal, isJobModal: modal === 'job', isPlantModal: modal === 'plant', canDelete: modal === 'job' && !!draft.id,
+      modalTitle: modal === 'plant' ? `ผลกระทบ · โรงไฟฟ้า ${draft.pid}` : draft.id ? 'อัปเดตงาน' : 'เพิ่มงาน P1 ใหม่',
+      modalColor: pmeta.color, draft, set,
+      closeModal: () => this.setState({ modal: null }), stop: e => e.stopPropagation(), saveModal: () => this.save(),
+      deleteJob: () => { if (confirm('ลบงานนี้?')) this.commit({ ...data, jobs: data.jobs.filter(j => j.id !== draft.id) }); },
+      fileRef: this.fileRef,
+      exportData: () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); a.download = `P1-dashboard-${iso(t)}.json`; a.click(); },
+      pickImport: () => this.fileRef.current && this.fileRef.current.click(),
+      onImport: e => { const f = e.target.files[0]; if (!f) return; f.text().then(txt => { try { const d = JSON.parse(txt); if (!d.jobs) throw 0; this.commit(d); } catch (err) { alert('ไฟล์ไม่ถูกต้อง'); } }); e.target.value = ''; },
+      resetData: () => { if (confirm('คืนค่าข้อมูลตัวอย่าง? ข้อมูลที่แก้ไขจะหายไป')) this.commit(SEED()); },
+    };
+  }
+}
+</script>
+</body>
+</html>

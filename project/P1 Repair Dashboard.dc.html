@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-bd86f516-f3ce-4021-bc18-004c4ca54e99/styles.css">
+<script src="_ds/organic-bd86f516-f3ce-4021-bc18-004c4ca54e99/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500&family=Anuphan:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0;background:var(--color-bg);font-family:"Figtree","Anuphan",system-ui,sans-serif;}
+a{color:var(--color-accent-700);}a:hover{color:var(--color-accent-800);}
+</style>
+</helmet>
+<div style="max-width:1920px;margin:0 auto;padding:28px 36px 32px;display:flex;flex-direction:column;gap:20px;color:var(--color-text);">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px;">
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="background:var(--color-accent-700);color:var(--color-neutral-100);font-weight:700;font-size:13px;padding:4px 12px;border-radius:999px;">PRIORITY 1</span>
+        <span style="font-size:14px;color:var(--color-neutral-700);font-weight:600;white-space:nowrap;">ข้อมูล ณ {{ asOf }}</span>
+      </div>
+      <h1 style="font-family:'Caprasimo','Mitr',sans-serif;font-size:clamp(26px,3.2vw,38px);margin:0;line-height:1.4;">Top 5 งานซ่อมเร่งด่วน · 4 โรงไฟฟ้า</h1>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch;">
+      <div style="display:flex;align-items:center;gap:14px;background:var(--color-surface);border-radius:var(--radius-lg);padding:10px 22px 10px 12px;">
+        <div style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-2-700);color:var(--color-neutral-100);display:flex;align-items:center;justify-content:center;font-family:'Caprasimo',sans-serif;font-size:21px;">{{ overall.pct }}%</div>
+        <div style="display:flex;flex-direction:column;line-height:1.3;">
+          <span style="font-size:13px;font-weight:600;color:var(--color-neutral-700);">ความสำเร็จรวม 4 โรง</span>
+          <span style="font-size:15px;font-weight:600;">เสร็จ {{ overall.done }} / {{ overall.total }} งาน</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:18px;background:var(--color-surface);border-radius:var(--radius-lg);padding:10px 22px;">
+        <div style="display:flex;flex-direction:column;line-height:1.4;"><span style="font-size:13px;font-weight:600;color:var(--color-neutral-700);white-space:nowrap;">กำลังดำเนินการ</span><span style="font-size:24px;font-weight:700;">{{ overall.doing }}</span></div>
+        <div style="display:flex;flex-direction:column;line-height:1.4;"><span style="font-size:13px;font-weight:600;color:var(--color-neutral-700);white-space:nowrap;">คงค้าง</span><span style="font-size:24px;font-weight:700;color:var(--color-accent-700);">{{ overall.pending }}</span></div>
+        <div style="display:flex;flex-direction:column;line-height:1.4;"><span style="font-size:13px;font-weight:600;color:var(--color-neutral-700);white-space:nowrap;">Top 5 ล่าช้า</span><span style="font-size:24px;font-weight:700;color:var(--color-accent-700);">{{ overall.late }}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:center;gap:6px;background:var(--color-surface);border-radius:var(--radius-lg);padding:10px 22px;">
+        <span style="font-size:13px;font-weight:600;color:var(--color-neutral-700);">หน้างานติดอะไรมากที่สุด (Top 5 ทั้ง 4 โรง)</span>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <sc-for list="{{ blockerSummary }}" as="b" hint-placeholder-count="4">
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap;line-height:1.4;background:{{ b.bg }};color:{{ b.fg }};">{{ b.label }} <b style="font-size:14px;">{{ b.count }}</b></span>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+    <section style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;">
+        <h2 style="font-family:'Caprasimo','Mitr',sans-serif;font-size:22px;margin:0;line-height:1.4;">{{ g.title }}</h2>
+        <span style="font-size:14px;color:var(--color-neutral-700);white-space:nowrap;">{{ g.note }}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,780px),1fr));gap:18px;">
+        <sc-for list="{{ g.plants }}" as="p" hint-placeholder-count="2">
+          <article style="background:var(--color-neutral-100);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:18px 20px 12px;display:flex;flex-direction:column;gap:10px;min-width:0;">
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+              <div style="position:relative;width:76px;height:76px;flex:none;">
+                <svg width="76" height="76" viewBox="0 0 76 76" style="transform:rotate(-90deg);">
+                  <circle cx="38" cy="38" r="31" fill="none" stroke="var(--color-neutral-300)" stroke-width="9"></circle>
+                  <circle cx="38" cy="38" r="31" fill="none" stroke="var(--color-accent-2-600)" stroke-width="9" stroke-linecap="round" stroke-dasharray="{{ p.dash }}"></circle>
+                </svg>
+                <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;">{{ p.pct }}%</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:180px;">
+                <h3 style="font-family:'Caprasimo','Mitr',sans-serif;font-size:26px;margin:0;line-height:1.4;">{{ p.name }}</h3>
+                <span style="font-size:13px;color:var(--color-neutral-700);font-weight:600;">ความสำเร็จงานซ่อม P1 ทั้งหมดของโรง</span>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <div style="display:flex;flex-direction:column;align-items:center;min-width:64px;padding:6px 10px;border-radius:var(--radius-md);background:var(--color-neutral-200);"><span style="font-size:22px;font-weight:700;line-height:1.35;">{{ p.total }}</span><span style="font-size:12px;font-weight:600;color:var(--color-neutral-700);">ทั้งหมด</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;min-width:64px;padding:6px 10px;border-radius:var(--radius-md);background:var(--color-accent-2-200);"><span style="font-size:22px;font-weight:700;line-height:1.35;color:var(--color-accent-2-800);">{{ p.done }}</span><span style="font-size:12px;font-weight:600;color:var(--color-accent-2-800);">เสร็จ</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;min-width:64px;padding:6px 10px;border-radius:var(--radius-md);background:var(--color-neutral-200);"><span style="font-size:22px;font-weight:700;line-height:1.35;">{{ p.doing }}</span><span style="font-size:12px;font-weight:600;color:var(--color-neutral-700);">กำลังทำ</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;min-width:64px;padding:6px 10px;border-radius:var(--radius-md);background:var(--color-accent-200);"><span style="font-size:22px;font-weight:700;line-height:1.35;color:var(--color-accent-800);">{{ p.pending }}</span><span style="font-size:12px;font-weight:600;color:var(--color-accent-800);">คงค้าง</span></div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:26px minmax(0,1.7fr) minmax(0,0.95fr) 112px minmax(0,1.25fr);gap:12px;padding:6px 10px;border-radius:999px;background:var(--color-surface);font-size:12.5px;font-weight:700;color:var(--color-neutral-800);">
+              <span>#</span><span>ปัญหาเครื่องจักร / แนวทางดำเนินงาน</span><span>ผู้รับผิดชอบ / ระยะเวลา</span><span>ความคืบหน้า</span><span>ปัญหาหน้างาน · ติดอะไร</span>
+            </div>
+            <div style="display:flex;flex-direction:column;">
+              <sc-for list="{{ p.jobs }}" as="j" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:26px minmax(0,1.7fr) minmax(0,0.95fr) 112px minmax(0,1.25fr);gap:12px;align-items:start;padding:9px 10px;border-bottom:1px solid var(--color-neutral-200);opacity:{{ j.opacity }};">
+                  <span style="width:24px;height:24px;border-radius:50%;background:{{ j.rankBg }};color:{{ j.rankFg }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">{{ j.rank }}</span>
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                    <span style="font-size:14.5px;font-weight:700;line-height:1.35;text-wrap:pretty;">{{ j.issue }}</span>
+                    <span style="font-size:13px;line-height:1.35;color:var(--color-neutral-800);">→ {{ j.action }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                    <span style="font-size:13.5px;font-weight:600;line-height:1.3;">{{ j.owner }}</span>
+                    <span style="font-size:12px;color:var(--color-neutral-700);line-height:1.3;">{{ j.team }} · {{ j.period }}</span>
+                    <span style="font-size:12px;font-weight:700;color:{{ j.timeColor }};">{{ j.timeText }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:5px;padding-top:2px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                      <span style="font-size:15px;font-weight:700;">{{ j.progress }}%</span>
+                      <span style="font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:{{ j.statusBg }};color:{{ j.statusFg }};">{{ j.statusLabel }}</span>
+                    </div>
+                    <div style="height:8px;border-radius:999px;background:var(--color-neutral-300);overflow:hidden;">
+                      <div style="height:100%;border-radius:999px;width:{{ j.progressW }};background:{{ j.barColor }};"></div>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0;">
+                    <span style="font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap;line-height:1.4;max-width:100%;overflow:hidden;text-overflow:ellipsis;background:{{ j.bBg }};color:{{ j.bFg }};">{{ j.bLabel }}</span>
+                    <span style="font-size:12.5px;line-height:1.35;color:var(--color-neutral-800);text-wrap:pretty;">{{ j.blockerText }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <footer style="display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--color-neutral-700);font-weight:600;">
+    <span>% ความสำเร็จ = งานที่เสร็จ ÷ งาน P1 ทั้งหมดของโรง</span>
+    <span>คงค้าง = ยังไม่เริ่มดำเนินการ</span>
+    <span>เรียงลำดับตามความสำคัญ (ผลกระทบต่อกำลังผลิต)</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;all&quot;,&quot;5-10&quot;,&quot;6-11&quot;],&quot;default&quot;:&quot;all&quot;,&quot;tsType&quot;:&quot;'all'|'5-10'|'6-11'&quot;},&quot;sortBy&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;priority&quot;,&quot;progress&quot;],&quot;default&quot;:&quot;priority&quot;,&quot;tsType&quot;:&quot;'priority'|'progress'&quot;},&quot;highlightBlocked&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const TODAY = new Date('2026-09-30');
+const BLOCK = {
+  part:   { label: 'รออะไหล่', bg: 'var(--color-accent-200)', fg: 'var(--color-accent-800)' },
+  outage: { label: 'รอหยุดเครื่อง', bg: 'var(--color-accent-2-200)', fg: 'var(--color-accent-2-800)' },
+  vendor: { label: 'รอผู้รับเหมา', bg: 'var(--color-neutral-300)', fg: 'var(--color-neutral-900)' },
+  budget: { label: 'รออนุมัติงบ', bg: 'var(--color-accent-300)', fg: 'var(--color-accent-900)' },
+  none:   { label: 'ไม่ติดปัญหา', bg: 'var(--color-accent-2-100)', fg: 'var(--color-accent-2-700)' },
+};
+const J = (issue, action, owner, team, period, end, progress, blocker, blockerText, status) => ({ issue, action, owner, team, period, end, progress, blocker, blockerText, status });
+const PLANTS = {
+  5: { total: 24, done: 15, doing: 6, pending: 3, jobs: [
+    J('Boiler Feed Pump B สั่นสูงเกินเกณฑ์ (7.8 mm/s)', 'เปลี่ยน Bearing และทำ Alignment ใหม่', 'สมชาย ก.', 'เครื่องกล', '1–10 ต.ค.', '2026-10-10', 60, 'part', 'Bearing จากผู้ผลิตยังไม่ถึง คาดส่ง 5 ต.ค.', 'ontrack'),
+    J('Air Preheater Seal รั่ว ประสิทธิภาพ Boiler ลด', 'เปลี่ยน Radial Seal ทั้งชุด', 'วิชัย ส.', 'ทีม Boiler', '20 ก.ย.–5 ต.ค.', '2026-10-05', 35, 'outage', 'ต้องลดโหลด/หยุดเครื่อง รอศูนย์ควบคุมอนุมัติช่วงเวลา', 'late'),
+    J('ID Fan A Bearing อุณหภูมิสูง 92°C', 'ตรวจระบบ Lube Oil และเปลี่ยน Oil Cooler', 'ประยุทธ ม.', 'เครื่องกล', '25 ก.ย.–3 ต.ค.', '2026-10-03', 80, 'none', 'ดำเนินการได้ตามแผน', 'ontrack'),
+    J('HP Bypass Control Valve ค้าง', 'Overhaul Actuator และ Positioner', 'นภา ร.', 'C&I', '28 ก.ย.–12 ต.ค.', '2026-10-12', 20, 'vendor', 'ออก PO แล้ว รอผู้รับเหมาเข้าหน้างาน', 'ontrack'),
+    J('Condenser Vacuum ต่ำกว่าเกณฑ์', 'Helium Leak Test หาจุดรั่วและอุด', 'อนันต์ พ.', 'Performance', '15–30 ก.ย.', '2026-09-30', 100, 'none', 'ปิดงานแล้ว', 'done'),
+  ]},
+  10: { total: 20, done: 9, doing: 7, pending: 4, jobs: [
+    J('Generator Transformer ค่า DGA สูงผิดปกติ', 'Oil Filtering และทดสอบ DGA ซ้ำ', 'ธนพล จ.', 'ไฟฟ้า', '22 ก.ย.–8 ต.ค.', '2026-10-08', 45, 'vendor', 'รถ Filter ของผู้รับเหมาติดคิวงานโรงอื่น', 'late'),
+    J('Coal Mill C ลูกบดสึก ผลิตได้ไม่เต็มกำลัง', 'เปลี่ยน Grinding Roller', 'สุริยา ท.', 'เครื่องกล', '1–20 ต.ค.', '2026-10-20', 10, 'part', 'Roller ยังไม่ถึง (Lead time 6 สัปดาห์)', 'ontrack'),
+    J('Cooling Water Pump 2 Seal รั่ว', 'เปลี่ยน Mechanical Seal', 'กิตติ ว.', 'เครื่องกล', '26 ก.ย.–2 ต.ค.', '2026-10-02', 90, 'none', 'ดำเนินการได้ตามแผน', 'ontrack'),
+    J('DCS Controller สำรองไม่ Sync', 'Update Firmware และทดสอบ Redundancy', 'พรทิพย์ น.', 'C&I', '20–30 ก.ย.', '2026-09-30', 70, 'outage', 'ทดสอบ Switch-over ได้เฉพาะตอนหยุดเครื่อง', 'late'),
+    J('Soot Blower 12 ติดขัด', 'ซ่อม Gearbox และ Lance', 'ชาตรี บ.', 'ทีม Boiler', '29 ก.ย.–10 ต.ค.', '2026-10-10', 25, 'budget', 'รออนุมัติ PR ค่าอะไหล่ Gearbox', 'ontrack'),
+  ]},
+  6: { total: 18, done: 13, doing: 4, pending: 1, jobs: [
+    J('Gas Turbine Exhaust Temp Spread สูง', 'Borescope ตรวจ Combustor', 'ณัฐวุฒิ ศ.', 'GT Team', '24 ก.ย.–6 ต.ค.', '2026-10-06', 55, 'outage', 'ต้องรอ GT Cool Down 48 ชม. ก่อนเข้าตรวจ', 'ontrack'),
+    J('HRSG HP Drum Level Transmitter ค่าแกว่ง', 'เปลี่ยน Transmitter และ Calibrate', 'ศิริพร ล.', 'C&I', '27 ก.ย.–1 ต.ค.', '2026-10-01', 85, 'none', 'ดำเนินการได้ตามแผน', 'ontrack'),
+    J('Circuit Breaker 6.9 kV Trip ไม่ทราบสาเหตุ', 'ทดสอบ Protection Relay และ Timing', 'อรุณ ช.', 'ไฟฟ้า', '18–29 ก.ย.', '2026-09-29', 60, 'vendor', 'รอผู้เชี่ยวชาญ Relay จากผู้ผลิต', 'late'),
+    J('Inlet Air Filter อุดตัน ΔP สูง', 'เปลี่ยน Filter Cartridge 50%', 'วีระ ด.', 'GT Team', '1–7 ต.ค.', '2026-10-07', 15, 'part', 'Cartridge ส่งมาไม่ครบ ขาด 120 ชิ้น', 'ontrack'),
+    J('Fuel Gas Filter ΔP สูง', 'เปลี่ยน Filter Element', 'มานพ ย.', 'เครื่องกล', '20–28 ก.ย.', '2026-09-28', 100, 'none', 'ปิดงานแล้ว', 'done'),
+  ]},
+  11: { total: 22, done: 8, doing: 9, pending: 5, jobs: [
+    J('Steam Turbine Bearing 3 Vibration สูง', 'Balancing และตรวจ Alignment', 'ปิยะ ห.', 'เครื่องกล', '15 ก.ย.–5 ต.ค.', '2026-10-05', 40, 'outage', 'ต้องหยุดเครื่อง ≥3 วัน ยังไม่ได้ช่วงเวลา', 'late'),
+    J('Economizer Tube รั่ว', 'เชื่อมซ่อมและตรวจ NDT', 'สมศักดิ์ อ.', 'ทีม Boiler', '26 ก.ย.–4 ต.ค.', '2026-10-04', 65, 'vendor', 'ช่างเชื่อม Certified ไม่พอ (ได้ 2 จาก 4 คน)', 'ontrack'),
+    J('Feedwater Heater 6 Level Control ผิดปกติ', 'ตรวจ Level Switch และ Drain Valve', 'จิราพร ค.', 'C&I', '23–30 ก.ย.', '2026-09-30', 75, 'part', 'รอ Valve Trim สำรองจากคลัง', 'late'),
+    J('Cooling Tower Fan 4 Gearbox เสียงดัง', 'เปลี่ยน Gearbox', 'บุญมี ส.', 'เครื่องกล', '1–15 ต.ค.', '2026-10-15', 5, 'budget', 'รออนุมัติงบซื้อ Gearbox ใหม่', 'ontrack'),
+    J('Battery Charger 220 VDC Alarm', 'เปลี่ยน Rectifier Module', 'ธีระ ป.', 'ไฟฟ้า', '29 ก.ย.–3 ต.ค.', '2026-10-03', 50, 'none', 'ดำเนินการได้ตามแผน', 'ontrack'),
+  ]},
+};
+const STATUS = {
+  done:    { label: 'เสร็จ', bg: 'var(--color-accent-2-200)', fg: 'var(--color-accent-2-800)', bar: 'var(--color-accent-2-600)' },
+  ontrack: { label: 'ตามแผน', bg: 'var(--color-neutral-200)', fg: 'var(--color-neutral-800)', bar: 'var(--color-accent-2-500)' },
+  late:    { label: 'ล่าช้า', bg: 'var(--color-accent-700)', fg: 'var(--color-neutral-100)', bar: 'var(--color-accent-500)' },
+};
+
+class Component extends DCLogic {
+  plant(id) {
+    const d = PLANTS[id];
+    const hl = this.props.highlightBlocked ?? false;
+    let jobs = d.jobs.map((j, i) => ({ ...j, rank: i + 1 }));
+    if ((this.props.sortBy ?? 'priority') === 'progress') jobs = [...jobs].sort((a, b) => a.progress - b.progress);
+    jobs = jobs.map(j => {
+      const s = STATUS[j.status], b = BLOCK[j.blocker];
+      const days = Math.round((new Date(j.end) - TODAY) / 864e5);
+      let timeText, timeColor = 'var(--color-neutral-700)';
+      if (j.status === 'done') { timeText = 'ปิดงานแล้ว'; timeColor = 'var(--color-accent-2-700)'; }
+      else if (days < 0) { timeText = `เกินกำหนด ${-days} วัน`; timeColor = 'var(--color-accent-700)'; }
+      else if (days === 0) { timeText = 'ครบกำหนดวันนี้'; timeColor = 'var(--color-accent-700)'; }
+      else timeText = `เหลือ ${days} วัน`;
+      return { ...j, timeText, timeColor, progressW: j.progress + '%', barColor: s.bar, statusLabel: s.label, statusBg: s.bg, statusFg: s.fg,
+        bLabel: b.label, bBg: b.bg, bFg: b.fg,
+        rankBg: j.status === 'late' ? 'var(--color-accent-700)' : 'var(--color-text)', rankFg: 'var(--color-neutral-100)',
+        opacity: hl && j.blocker === 'none' ? 0.4 : 1 };
+    });
+    const pct = Math.round(d.done / d.total * 100), C = 2 * Math.PI * 31;
+    return { name: 'โรงไฟฟ้า ' + id, total: d.total, done: d.done, doing: d.doing, pending: d.pending, pct, dash: `${C * pct / 100} ${C}`, jobs };
+  }
+  renderVals() {
+    const view = this.props.view ?? 'all';
+    const defs = [
+      { key: 'a', title: 'กลุ่ม 1 · โรงไฟฟ้า 5 และ 10', ids: [5, 10] },
+      { key: 'b', title: 'กลุ่ม 2 · โรงไฟฟ้า 6 และ 11', ids: [6, 11] },
+    ].filter(g => view === 'all' || (view === '5-10' ? g.key === 'a' : g.key === 'b'));
+    const groups = defs.map(g => {
+      const plants = g.ids.map(id => this.plant(id));
+      const t = plants.reduce((s, p) => s + p.total, 0), dn = plants.reduce((s, p) => s + p.done, 0);
+      return { title: g.title, note: `สำเร็จรวม ${Math.round(dn / t * 100)}% · เสร็จ ${dn} จาก ${t} งาน`, plants };
+    });
+    const all = [5, 10, 6, 11].map(id => PLANTS[id]);
+    const sum = k => all.reduce((s, p) => s + p[k], 0);
+    const jobs = all.flatMap(p => p.jobs);
+    const counts = {};
+    jobs.forEach(j => { if (j.blocker !== 'none') counts[j.blocker] = (counts[j.blocker] || 0) + 1; });
+    const blockerSummary = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, c]) => ({ ...BLOCK[k], count: c }));
+    return {
+      asOf: '30 ก.ย. 2569',
+      overall: { total: sum('total'), done: sum('done'), doing: sum('doing'), pending: sum('pending'), pct: Math.round(sum('done') / sum('total') * 100), late: jobs.filter(j => j.status === 'late').length },
+      blockerSummary, groups,
+    };
+  }
+}
+</script>
+</body>
+</html>
