@@ -69,6 +69,13 @@ const KEY_STORE = 'p1dash.editKey';
 const readKey = () => { try { return localStorage.getItem(KEY_STORE) || ''; } catch { return ''; } };
 const writeKey = (k) => { try { if (k) localStorage.setItem(KEY_STORE, k); else localStorage.removeItem(KEY_STORE); } catch { /* storage blocked */ } };
 const POLL_MS = 15000;
+const TIMEOUT_MS = 30000;
+// fetch() that gives up after TIMEOUT_MS instead of leaving the page waiting forever.
+const fetchT = (url, opts = {}) => {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
+};
 
 function useApiStore() {
   const [status, setStatus] = useState('connecting');
@@ -79,7 +86,7 @@ function useApiStore() {
   const versionRef = useRef(null);
 
   const load = useCallback(async () => {
-    const r = await fetch('api/state', { cache: 'no-store' });
+    const r = await fetchT('api/state', { cache: 'no-store' });
     if (!r.ok) throw new StoreError('unavailable');
     const d = await r.json();
     versionRef.current = d.updatedAt;
@@ -89,23 +96,23 @@ function useApiStore() {
 
   useEffect(() => {
     // Learn the edit rules before the page is ready, so the edit button knows whether to ask for the password.
-    const loadMe = fetch('api/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((m) => m && setMe(m)).catch(() => {});
-    loadMe.then(load).catch(async () => {
+    const loadMe = fetchT('api/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((m) => m && setMe(m)).catch(() => {});
+    loadMe.then(load).catch(async (err) => {
       setStatus('unavailable');
       // Ask the server why, so the page can show a reason an administrator can act on.
       try {
-        const r = await fetch('api/health', { cache: 'no-store' });
+        const r = await fetchT('api/health', { cache: 'no-store' });
         const b = await r.json().catch(() => ({}));
         setProblem(b.detail || b.error || `HTTP ${r.status}`);
-      } catch {
-        setProblem('ติดต่อเซิร์ฟเวอร์ไม่ได้');
+      } catch (e) {
+        setProblem(e?.name === 'AbortError' || err?.name === 'AbortError' ? 'timeout: เซิร์ฟเวอร์ไม่ตอบภายใน 30 วินาที' : 'ติดต่อเซิร์ฟเวอร์ไม่ได้');
       }
     });
     // Poll a tiny version stamp while the tab is visible; fetch everything only when it changes.
     const tick = async () => {
       if (document.hidden) return;
       try {
-        const r = await fetch('api/version', { cache: 'no-store' });
+        const r = await fetchT('api/version', { cache: 'no-store' });
         if (!r.ok) return;
         const { updatedAt } = await r.json();
         if (updatedAt !== versionRef.current) await load();
@@ -122,7 +129,7 @@ function useApiStore() {
     if (body) headers['Content-Type'] = 'application/json';
     if (key) headers['X-Edit-Key'] = key;
     try {
-      return await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      return await fetchT(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     } catch {
       throw new StoreError('unavailable');
     }

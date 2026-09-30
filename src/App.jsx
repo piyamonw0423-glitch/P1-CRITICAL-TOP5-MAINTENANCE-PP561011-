@@ -42,6 +42,12 @@ export default function App() {
   const [backup] = useState(readLocalBackup);
   const [askKey, setAskKey] = useState(false);
   const [flashId, setFlashId] = useState(null);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (status !== 'connecting') return undefined;
+    const t = setTimeout(() => setSlow(true), 6000);
+    return () => clearTimeout(t);
+  }, [status]);
 
   // After saving, briefly highlight the job and bring it into view so the change is easy to spot.
   useEffect(() => {
@@ -191,7 +197,12 @@ export default function App() {
       {editMode && <EditBar shared={store.shared} onExport={exportData} onImportFile={importFile} onReset={resetData} />}
 
       <main className="main">
-        {status === 'connecting' && <StatusPanel title="กำลังโหลดข้อมูลล่าสุด…" />}
+        {status === 'connecting' && (
+          <StatusPanel
+            title="กำลังโหลดข้อมูลล่าสุด…"
+            text={slow ? 'กำลังเชื่อมต่อฐานข้อมูล ถ้าไม่มีคนใช้มาสักพัก ครั้งแรกอาจใช้เวลา 5–20 วินาที' : undefined}
+          />
+        )}
         {status === 'unavailable' && (
           <StatusPanel
             title="ยังเปิดข้อมูลแดชบอร์ดไม่ได้"
