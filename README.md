@@ -29,6 +29,12 @@ npm run preview
 มี workflow `.github/workflows/deploy.yml` สำหรับ deploy ขึ้น GitHub Pages อัตโนมัติเมื่อ push เข้า `main`
 (ต้องตั้ง Settings → Pages → Source เป็น "GitHub Actions")
 
+### เผยแพร่เป็นหน้าเว็บบน claude.ai (Artifact)
+
+```bash
+npm run build:artifact   # สร้าง dist-artifact/p1-dashboard.html (ไฟล์เดียว, React โหลดจาก cdnjs)
+```
+
 ## โครงสร้าง
 
 - `src/lib/data.js` — ข้อมูลตั้งต้น, สีประจำโรง/สถานะ/ปัญหา, การบันทึก

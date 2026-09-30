@@ -65,6 +65,7 @@ function Field({ label, wide, children }) {
 
 export function JobModal({ initial, onSave, onDelete, onClose }) {
   const [d, setD] = useState(() => ({ photos: [], ...initial, plant: String(initial.plant) }));
+  const [err, setErr] = useState('');
 
   const set = (k) => (e) => {
     const v = e.target.value;
@@ -95,7 +96,7 @@ export function JobModal({ initial, onSave, onDelete, onClose }) {
   };
 
   const save = () => {
-    if (!d.issue.trim()) { alert('กรุณากรอกปัญหาเครื่องจักร'); return; }
+    if (!d.issue.trim()) { setErr('กรุณากรอกปัญหาเครื่องจักรก่อนบันทึก'); return; }
     onSave({ ...d, plant: +d.plant, rank: Math.max(1, +d.rank || 1), progress: +d.progress, id: d.id || `j${Date.now()}` });
   };
 
@@ -113,7 +114,8 @@ export function JobModal({ initial, onSave, onDelete, onClose }) {
           <input className="field" type="number" min="1" value={d.rank} onChange={set('rank')} />
         </Field>
         <Field label="1. ปัญหาเครื่องจักร" wide>
-          <input className="field" value={d.issue} onChange={set('issue')} placeholder="เช่น Boiler Feed Pump B สั่นสูง" autoFocus={!d.id} />
+          <input className={`field${err ? ' is-invalid' : ''}`} value={d.issue} onChange={(e) => { setErr(''); set('issue')(e); }} placeholder="เช่น Boiler Feed Pump B สั่นสูง" autoFocus={!d.id} aria-invalid={!!err} />
+          {err && <span className="field-error">{err}</span>}
         </Field>
         <Field label="2. แนวทางดำเนินงาน" wide>
           <input className="field" value={d.action} onChange={set('action')} />

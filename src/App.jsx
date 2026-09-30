@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EditBar, Header } from './components/Header.jsx';
 import { FilterSelect, Highlights, KpiRow } from './components/Summary.jsx';
 import PlantCard from './components/PlantCard.jsx';
 import { BlockerSummary, TrendPanel } from './components/Insights.jsx';
 import { ImpactModal, JobModal, Lightbox } from './components/Modals.jsx';
+import { ConfirmDialog, Toast } from './components/Feedback.jsx';
 import { FILTERS, SEED, commitData, loadData } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
-  const v = new URLSearchParams(window.location.search).get('view');
+  let v = null;
+  try { v = new URLSearchParams(window.location.search).get('view'); } catch { /* no query access */ }
   return FILTERS.some((f) => f.k === v) ? v : 'all';
 };
 
@@ -21,6 +23,10 @@ export default function App() {
   const [lightbox, setLightbox] = useState(null);
   const [filter, setFilter] = useState(readView);
   const [now, setNow] = useState(() => new Date());
+  const [ask, setAsk] = useState(null); // { message, confirmLabel, onConfirm }
+  const [toast, setToast] = useState(null); // { text, error? }
+  const clearToast = useCallback(() => setToast(null), []);
+  const closeAsk = useCallback(() => setAsk(null), []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30000);
@@ -28,10 +34,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    if (filter === 'all') url.searchParams.delete('view');
-    else url.searchParams.set('view', filter);
-    window.history.replaceState(null, '', url);
+    try {
+      const url = new URL(window.location.href);
+      if (filter === 'all') url.searchParams.delete('view');
+      else url.searchParams.set('view', filter);
+      window.history.replaceState(null, '', url);
+    } catch { /* sandboxed frames may refuse history updates */ }
   }, [filter]);
 
   const t = today0();
@@ -39,9 +47,9 @@ export default function App() {
   // Recompute when the calendar day rolls over (t is derived from tKey).
   const view = useMemo(() => dashboardView(data, filter, t), [data, filter, tKey]);
 
-  const commit = (next) => {
+  const commit = (next, okText = 'บันทึกแล้ว') => {
     const { next: saved, ok } = commitData(next);
-    if (!ok) alert('พื้นที่จัดเก็บในเครื่องเต็ม กรุณาลบรูปเก่าบางรูป หรือส่งออกไฟล์เก็บไว้ก่อน');
+    setToast(ok ? { text: okText } : { text: 'พื้นที่จัดเก็บในเครื่องเต็ม กรุณาลบรูปเก่าบางรูป หรือส่งออกไฟล์เก็บไว้ก่อน', error: true });
     setData(saved);
     setModal(null);
   };
@@ -62,15 +70,32 @@ export default function App() {
   };
 
   const deleteJob = (id) => {
-    if (confirm('ลบงานนี้?')) commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) });
+    setAsk({
+      message: 'ลบงานนี้? ลบแล้วกู้คืนไม่ได้',
+      confirmLabel: 'ลบงาน',
+      onConfirm: () => { setAsk(null); commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }, 'ลบงานแล้ว'); },
+    });
   };
 
   const saveImpact = (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } });
 
-  const exportData = () => {
+  const exportData = async () => {
+    const filename = `P1-dashboard-${iso(t)}.json`;
+    const json = JSON.stringify(data, null, 2);
+    // Inside a claude.ai artifact, downloads go through the viewer's save prompt.
+    const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+    if (downloads) {
+      try {
+        await downloads.save({ filename, data: json });
+        setToast({ text: `ส่งออกไฟล์ ${filename} แล้ว` });
+      } catch (e) {
+        if (e?.code !== 'declined') setToast({ text: 'ส่งออกไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง', error: true });
+      }
+      return;
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    a.download = `P1-dashboard-${iso(t)}.json`;
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = filename;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -80,14 +105,18 @@ export default function App() {
       try {
         const d = JSON.parse(txt);
         if (!Array.isArray(d.jobs)) throw new Error('missing jobs');
-        commit({ plants: {}, history: [], ...d });
+        commit({ plants: {}, history: [], ...d }, 'นำเข้าข้อมูลแล้ว');
       } catch {
-        alert('ไฟล์ไม่ถูกต้อง');
+        setToast({ text: 'ไฟล์ไม่ถูกต้อง ต้องเป็นไฟล์ .json ที่ส่งออกจากแดชบอร์ดนี้', error: true });
       }
     });
 
   const resetData = () => {
-    if (confirm('คืนค่าข้อมูลตัวอย่าง? ข้อมูลที่แก้ไขจะหายไป')) commit(SEED());
+    setAsk({
+      message: 'คืนค่าข้อมูลตัวอย่าง? ข้อมูลที่แก้ไขในเครื่องนี้จะหายไป',
+      confirmLabel: 'คืนค่าข้อมูล',
+      onConfirm: () => { setAsk(null); commit(SEED(), 'คืนค่าข้อมูลตัวอย่างแล้ว'); },
+    });
   };
 
   const scopeLabel = view.ids.length === 4 ? 'ทั้ง 4 โรง' : ` · ${view.filter.label}`;
@@ -147,6 +176,8 @@ export default function App() {
         <ImpactModal pid={modal.pid} impact={data.plants[modal.pid]?.impact || []} onSave={(impact) => saveImpact(modal.pid, impact)} onClose={() => setModal(null)} />
       )}
       {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
+      {ask && <ConfirmDialog {...ask} onCancel={closeAsk} />}
+      <Toast toast={toast} onDone={clearToast} />
     </div>
   );
 }
