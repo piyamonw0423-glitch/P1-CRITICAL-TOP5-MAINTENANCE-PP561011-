@@ -77,6 +77,7 @@ export default function App() {
     } catch (e) {
       setAsk(null);
       setToast({ text: errorText(e), error: true });
+      if (e?.code === 'wrong_key') setAskKey(true);
     } finally {
       setBusy(false);
     }
@@ -100,7 +101,21 @@ export default function App() {
 
   const exportData = async () => {
     const filename = `P1-dashboard-${iso(t)}.json`;
-    const json = JSON.stringify(data, null, 2);
+    // Photos served by link (server builds) are embedded so the file is a complete backup.
+    const embed = async (ph) => {
+      if (ph.src.startsWith('data:')) return { src: ph.src, date: ph.date };
+      const blob = await (await fetch(ph.src)).blob();
+      const src = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+      return { src, date: ph.date };
+    };
+    let full = data;
+    try {
+      full = { ...data, jobs: await Promise.all(data.jobs.map(async (j) => ({ ...j, photos: await Promise.all((j.photos || []).map(embed)) }))) };
+    } catch {
+      setToast({ text: 'โหลดรูปบางรูปไม่สำเร็จ ไฟล์ที่ส่งออกจะไม่มีรูป', error: true });
+      full = { ...data, jobs: data.jobs.map((j) => ({ ...j, photos: (j.photos || []).filter((ph) => ph.src.startsWith('data:')) })) };
+    }
+    const json = JSON.stringify(full, null, 2);
     // Inside a claude.ai artifact, downloads go through the viewer's save prompt.
     const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
     if (downloads) {

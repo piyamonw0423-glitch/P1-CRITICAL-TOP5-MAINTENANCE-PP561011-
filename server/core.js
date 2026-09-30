@@ -120,9 +120,12 @@ export function createDb(conn) {
     },
 
     async state() {
-      const rows = (await conn.query("SELECT collection, id, data FROM docs WHERE collection IN ('jobs','photos','plants','history','meta')")).rows;
+      // Photos are listed by link only (served by photo()), keeping this response small.
+      const rows = (await conn.query(`SELECT collection, id,
+          CASE WHEN collection = 'photos' THEN jsonb_build_object('jobId', data->'jobId', 'date', data->'date') ELSE data END AS data
+        FROM docs WHERE collection IN ('jobs','photos','plants','history','meta')`)).rows;
       const photos = {};
-      rows.filter((r) => r.collection === 'photos').forEach((r) => (photos[r.data.jobId] ||= []).push({ id: r.id, src: r.data.src, date: r.data.date }));
+      rows.filter((r) => r.collection === 'photos').forEach((r) => (photos[r.data.jobId] ||= []).push({ id: r.id, src: `api/photos/${encodeURIComponent(r.id)}`, date: r.data.date }));
       Object.values(photos).forEach((a) => a.sort((x, y) => x.date.localeCompare(y.date) || x.id.localeCompare(y.id)));
       const meta = rows.find((r) => r.collection === 'meta' && r.id === 'app');
       return {
@@ -132,6 +135,18 @@ export function createDb(conn) {
         updatedAt: meta?.data.updatedAt || null,
         updatedBy: meta?.data.updatedBy || null,
       };
+    },
+
+    /** One photo as { contentType, bytes }, or null. Photos are stored as data: URLs. */
+    async photo(id) {
+      if (!ID_RE.test(id)) return null;
+      const r = await conn.query("SELECT data->>'src' AS src FROM docs WHERE collection = 'photos' AND id = $1", [id]);
+      const m = /^data:(image\/[\w.+-]+);base64,(.*)$/s.exec(r.rows[0]?.src || '');
+      if (!m) return null;
+      const bin = atob(m[2]);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return { contentType: m[1], bytes };
     },
 
     saveJob(id, body, by) {

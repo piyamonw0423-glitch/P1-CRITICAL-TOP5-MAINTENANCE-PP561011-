@@ -32,6 +32,10 @@ app.use(express.json({ limit: '20mb' }));
 app.use('/api', async (req, res) => {
   const perm = permissions(process.env, null, req.get('X-Edit-Key'));
   const r = await handleApi(db, { method: req.method, path: req.baseUrl + req.path, body: req.body, perm });
+  if (r.bytes) {
+    res.set({ 'Content-Type': r.contentType, 'Cache-Control': 'private, max-age=31536000, immutable' }).status(r.status).send(Buffer.from(r.bytes));
+    return;
+  }
   res.set('Cache-Control', 'no-store').status(r.status).json(r.json);
 });
 

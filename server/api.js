@@ -28,10 +28,10 @@ const fail = (status, error) => ({ status, json: { error } });
 /**
  * @param db    createDb(...) instance
  * @param req   { method, path, body, perm } — perm from permissions()
- * @returns     { status, json }
+ * @returns     { status, json } — or { status, bytes, contentType } for a photo
  */
 export async function handleApi(db, { method, path, body, perm }) {
-  const m = path.match(/^\/api\/(jobs|plants)\/([^/]+)$/);
+  const m = path.match(/^\/api\/(jobs|plants|photos)\/([^/]+)$/);
   const id = m ? decodeURIComponent(m[2]) : null;
   const isWrite = method !== 'GET' && method !== 'HEAD';
 
@@ -40,6 +40,10 @@ export async function handleApi(db, { method, path, body, perm }) {
     if (method === 'GET' && path === '/api/me') return ok({ email: perm.email, canWrite: perm.canWrite, needsKey: perm.needsKey });
     if (method === 'GET' && path === '/api/state') return ok(await db.state());
     if (method === 'GET' && path === '/api/version') return ok(await db.version());
+    if (method === 'GET' && m?.[1] === 'photos') {
+      const ph = await db.photo(id);
+      return ph ? { status: 200, ...ph } : fail(404, 'not_found');
+    }
 
     if (isWrite) {
       if (!perm.canWrite) return fail(403, 'read_only');

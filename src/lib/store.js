@@ -75,6 +75,7 @@ function useApiStore() {
   const [data, setData] = useState({ jobs: [], plants: {}, history: [], updatedAt: null, updatedBy: null });
   const [me, setMe] = useState({ email: null, canWrite: null, needsKey: false });
   const [editKey, setEditKey] = useState(readKey);
+  const [problem, setProblem] = useState('');
   const versionRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -87,8 +88,19 @@ function useApiStore() {
   }, []);
 
   useEffect(() => {
-    load().catch(() => setStatus('unavailable'));
-    fetch('api/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((m) => m && setMe(m)).catch(() => {});
+    // Learn the edit rules before the page is ready, so the edit button knows whether to ask for the password.
+    const loadMe = fetch('api/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((m) => m && setMe(m)).catch(() => {});
+    loadMe.then(load).catch(async () => {
+      setStatus('unavailable');
+      // Ask the server why, so the page can show a reason an administrator can act on.
+      try {
+        const r = await fetch('api/health', { cache: 'no-store' });
+        const b = await r.json().catch(() => ({}));
+        setProblem(b.detail || b.error || `HTTP ${r.status}`);
+      } catch {
+        setProblem('ติดต่อเซิร์ฟเวอร์ไม่ได้');
+      }
+    });
     // Poll a tiny version stamp while the tab is visible; fetch everything only when it changes.
     const tick = async () => {
       if (document.hidden) return;
@@ -143,7 +155,7 @@ function useApiStore() {
     unlock,
     data,
     whoUpdated: data.updatedBy || '',
-    unavailableText: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ด',
+    unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
     deleteJob: (id) => send('DELETE', `api/jobs/${encodeURIComponent(id)}`),
     saveImpact: (pid, impact) => send('PUT', `api/plants/${pid}`, { impact }),
