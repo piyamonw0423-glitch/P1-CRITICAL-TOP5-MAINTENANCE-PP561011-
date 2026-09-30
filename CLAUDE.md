@@ -1,0 +1,31 @@
+# CLAUDE.md
+
+P1 Maintenance Dashboard: one-page Top 5 Priority-1 repair tracker for power plants 5, 10, 6, 11 (Thai UI).
+Full system doc, work log and roadmap: `docs/SYSTEM.md` (Thai). User-facing guide: `README.md`.
+
+## Stack & builds
+- React 19 + Vite 8, no router, plain CSS (`src/styles.css`, oklch tokens matching the Claude Design source in `project/`).
+- One UI, three data backends chosen at build time by `__BACKEND__` (see `src/lib/store.js`):
+  - `npm run build` → `local` (localStorage) → GitHub Pages via `.github/workflows/deploy.yml` (pushes `dist/` to `gh-pages`).
+  - `npm run build:server` → `api` → Cloudflare Worker (`worker/index.js`, `wrangler.jsonc`) or Node (`server/index.js`).
+  - `npm run build:artifact` → `artifact` → single file for the claude.ai artifact (React 18 UMD from cdnjs).
+- Server logic shared by Worker and Node: `server/core.js` (validation + Postgres, one `docs` table) and `server/api.js` (router + permissions).
+
+## Production
+- Cloudflare Worker `p1-critical-top5-maintenance-pp561011` at `https://p1-critical-top5-maintenance-pp561011.piyamon-w0423.workers.dev/`,
+  auto-deployed by Workers Builds on push to `main`. `wrangler.jsonc` runs `npm run build:server` before deploy (the dashboard's default
+  `npm run build` would ship the localStorage build) and sets `keep_vars: true`.
+- Secrets in the Cloudflare dashboard: `DATABASE_URL` (Neon pooled URL), `EDIT_PASSWORD`; optional `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `EDITOR_EMAILS`.
+- DB: Neon Postgres (Singapore). Worker connects via `@neondatabase/serverless` WebSocket, falls back to `pg` TCP; hard timeouts via `within()`
+  because pg timers do not fire on workerd. First connection creates the table and seeds 26 sample jobs once (`meta/seeded`).
+
+## Conventions
+- Dates are `YYYY-MM-DD` strings; "today" is Thai time (UTC+7). Job buckets: done / stuck (pending or overdue) / doing.
+- Imports without a `photos` key must keep existing photos (all three backends honour this); `replace: true` deletes jobs not imported.
+- Error details returned to the browser must never contain the database URL (see `reason()` in worker, api.js).
+- Commit messages end with the Co-Authored-By / Claude-Session lines used in history.
+
+## Testing locally
+- Worker end-to-end: start a throwaway Postgres, write `.dev.vars` (`DATABASE_URL=...`, `EDIT_PASSWORD=...`), `npx wrangler dev`, drive with Playwright
+  (`executablePath: '/opt/pw-browsers/chromium'`). Never commit `.dev.vars`.
+- The cloud dev sandbox cannot reach `*.workers.dev` or `neon.tech`; verify production through Cloudflare's GitHub check runs and user screenshots.

@@ -71,6 +71,7 @@ npm run build:artifact   # สร้าง dist-artifact/p1-dashboard.html (ไ�
 ## โครงสร้าง
 
 - `src/lib/data.js` — ข้อมูลตั้งต้น, สีประจำโรง/สถานะ/ปัญหา, การบันทึก
+- `docs/SYSTEM.md` — เอกสารระบบ บันทึกการทำงาน และ Roadmap
 - `src/lib/view.js` — คำนวณตัวเลข, Top 5, Highlights, แนวโน้ม
 - `src/lib/store.js` — ที่เก็บข้อมูล 3 แบบ: localStorage / ฐานข้อมูล claude.ai / API (Cloudflare หรือ Node)
 - `server/core.js`, `server/api.js` — ตรรกะข้อมูลและ API ที่ใช้ร่วมกัน
