@@ -9,17 +9,21 @@
     "preview": "vite preview",
     "build:artifact": "node scripts/build-artifact.mjs",
     "build:server": "vite build --mode api",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "dev:worker": "npm run build:server && wrangler dev",
+    "deploy:worker": "npm run build:server && wrangler deploy"
   },
   "dependencies": {
     "express": "^5.2.1",
+    "jose": "^6.2.12",
     "pg": "^8.23.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.0",
-    "vite": "^8.0.0"
+    "vite": "^8.0.0",
+    "wrangler": "^4.144.0"
   },
   "engines": {
     "node": ">=20"

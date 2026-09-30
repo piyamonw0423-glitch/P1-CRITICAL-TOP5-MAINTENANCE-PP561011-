@@ -4,7 +4,7 @@ import { FilterSelect, Highlights, KpiRow } from './components/Summary.jsx';
 import PlantCard from './components/PlantCard.jsx';
 import { BlockerSummary, TrendPanel } from './components/Insights.jsx';
 import { ImpactModal, JobModal, Lightbox } from './components/Modals.jsx';
-import { ConfirmDialog, Toast } from './components/Feedback.jsx';
+import { ConfirmDialog, PasswordDialog, Toast } from './components/Feedback.jsx';
 import { EmptyState, StatusPanel } from './components/States.jsx';
 import { FILTERS } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
@@ -23,6 +23,8 @@ const ERROR_TEXT = {
   quota_exceeded: 'พื้นที่จัดเก็บเต็ม กรุณาลบรูปเก่าบางรูปแล้วลองใหม่',
   resource_exhausted: 'บันทึกถี่เกินไป รอสักครู่แล้วลองใหม่',
   bad_request: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง ตรวจสอบช่องที่กรอกแล้วลองใหม่',
+  wrong_key: 'รหัสผ่านทีมไม่ถูกต้องหรือถูกเปลี่ยนแล้ว กดอัปเดตงานประจำวันแล้วใส่รหัสใหม่',
+  read_only: 'บัญชีนี้ดูได้อย่างเดียว ขอสิทธิ์แก้ไขจากผู้ดูแลแดชบอร์ด',
 };
 const errorText = (e) => ERROR_TEXT[e?.code] || 'บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่';
 
@@ -38,6 +40,7 @@ export default function App() {
   const [toast, setToast] = useState(null); // { text, error? }
   const [busy, setBusy] = useState(false);
   const [backup] = useState(readLocalBackup);
+  const [askKey, setAskKey] = useState(false);
   const clearToast = useCallback(() => setToast(null), []);
   const closeAsk = useCallback(() => setAsk(null), []);
 
@@ -156,7 +159,10 @@ export default function App() {
         editMode={editMode}
         canEdit={ready && canWrite !== false}
         readOnly={ready && canWrite === false}
-        onToggleEdit={() => setEditMode((v) => !v)}
+        onToggleEdit={() => {
+          if (!editMode && store.needsKey) setAskKey(true);
+          else setEditMode((v) => !v);
+        }}
       />
       {editMode && <EditBar shared={store.shared} onExport={exportData} onImportFile={importFile} onReset={resetData} />}
 
@@ -173,7 +179,7 @@ export default function App() {
             canWrite={canWrite !== false}
             backupCount={backup?.jobs.length || 0}
             busy={busy}
-            onStart={() => { setEditMode(true); openNew(5); }}
+            onStart={() => { if (store.needsKey) { setAskKey(true); return; } setEditMode(true); openNew(5); }}
             onMigrate={() => importParsed(backup)}
             onImportFile={importFile}
           />
@@ -245,6 +251,21 @@ export default function App() {
       )}
       {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
       {ask && <ConfirmDialog {...ask} busy={busy} onCancel={closeAsk} />}
+      {askKey && (
+        <PasswordDialog
+          onCancel={() => setAskKey(false)}
+          onSubmit={async (key) => {
+            try {
+              await store.unlock(key);
+              setAskKey(false);
+              setEditMode(true);
+              return '';
+            } catch (e) {
+              return e?.code === 'wrong_key' ? 'รหัสผ่านไม่ถูกต้อง' : errorText(e);
+            }
+          }}
+        />
+      )}
       <Toast toast={toast} onDone={clearToast} />
     </div>
   );

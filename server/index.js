@@ -1,58 +1,40 @@
-// P1 Repair Dashboard server: serves the built site (dist/) and a small shared-data API
-// backed by Postgres (Supabase). Every change is pushed to open browsers over Server-Sent Events.
+// Node server alternative to the Cloudflare Worker, e.g. for an in-house server:
+// serves the built site (dist/) and the same /api routes, with Postgres at DATABASE_URL.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { createDb } from './db.js';
+import pg from 'pg';
+import { createDb, inTx } from './core.js';
+import { handleApi, permissions } from './api.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  console.error('DATABASE_URL is not set. Use the Supabase "Session pooler" connection string.');
+  console.error('DATABASE_URL is not set.');
   process.exit(1);
 }
 
-const db = createDb(DATABASE_URL);
+const local = /@(localhost|127\.0\.0\.1)[:/]/.test(DATABASE_URL);
+const pool = new pg.Pool({ connectionString: DATABASE_URL, ssl: local ? false : { rejectUnauthorized: false }, max: 5 });
+const db = createDb({
+  query: (t, p) => pool.query(t, p),
+  tx: async (fn) => {
+    const c = await pool.connect();
+    try { return await inTx(c, fn); } finally { c.release(); }
+  },
+});
 await db.init();
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
 
-/* ---------- live updates ---------- */
-const clients = new Set();
-const broadcast = () => { for (const res of clients) res.write('event: change\ndata: {}\n\n'); };
-setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 25000).unref();
-
-app.get('/api/events', (req, res) => {
-  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-  res.flushHeaders();
-  res.write('retry: 5000\n\n');
-  clients.add(res);
-  req.on('close', () => clients.delete(res));
+// No Cloudflare Access here, so no verified email; EDIT_PASSWORD still applies.
+app.use('/api', async (req, res) => {
+  const perm = permissions(process.env, null, req.get('X-Edit-Key'));
+  const r = await handleApi(db, { method: req.method, path: req.baseUrl + req.path, body: req.body, perm });
+  res.set('Cache-Control', 'no-store').status(r.status).json(r.json);
 });
 
-/* ---------- API ---------- */
-const wrap = (fn) => async (req, res) => {
-  try {
-    const out = await fn(req, res);
-    res.json(out ?? { ok: true });
-  } catch (e) {
-    const status = e.status || 500;
-    if (status >= 500) console.error(e);
-    res.status(status).json({ error: e.expose ? e.message : 'server_error' });
-  }
-};
-const changed = (fn) => wrap(async (req, res) => { const out = await fn(req, res); broadcast(); return out; });
-
-app.get('/api/health', wrap(async () => { await db.ping(); return { ok: true }; }));
-app.get('/api/state', wrap(() => db.state()));
-app.put('/api/jobs/:id', changed((req) => db.saveJob(req.params.id, req.body)));
-app.delete('/api/jobs/:id', changed((req) => db.deleteJob(req.params.id)));
-app.put('/api/plants/:id', changed((req) => db.saveImpact(req.params.id, req.body?.impact)));
-app.post('/api/import', changed((req) => db.importData(req.body)));
-app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
-
-/* ---------- static site ---------- */
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 app.use(express.static(dist, { index: 'index.html', maxAge: '1h' }));
 app.use((req, res) => res.sendFile(path.join(dist, 'index.html')));

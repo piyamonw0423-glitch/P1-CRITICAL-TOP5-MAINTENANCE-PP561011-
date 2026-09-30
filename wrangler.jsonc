@@ -1,0 +1,21 @@
+// Cloudflare Worker config. Deploy: Workers & Pages → Create → Import a repository,
+// build command `npm run build:server`, deploy command `npx wrangler deploy`.
+// Secrets/variables (Settings → Variables and Secrets):
+//   DATABASE_URL (secret)                 Neon pooled connection string
+//   EDIT_PASSWORD (secret, optional)      team password for editing
+//   ACCESS_TEAM_DOMAIN, ACCESS_AUD        optional Cloudflare Access login (company email)
+//   EDITOR_EMAILS (optional)              comma-separated editors when Access is on
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "p1-maintenance-dashboard",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true }
+}

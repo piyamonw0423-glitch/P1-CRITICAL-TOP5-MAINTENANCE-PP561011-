@@ -38,25 +38,30 @@ npm run build:artifact   # สร้าง dist-artifact/p1-dashboard.html (ไ�
 เวอร์ชัน Artifact ใช้ฐานข้อมูลกลางของหน้า (capability `db`) ทุกคนที่มีสิทธิ์แก้ไขเห็นและบันทึกข้อมูลชุดเดียวกันแบบเรียลไทม์
 (ดูโครงสร้างข้อมูลใน `src/lib/store.js`) ส่วนเว็บปกติ (`npm run build`) ยังเก็บข้อมูลใน localStorage ของแต่ละเครื่อง
 
-### เว็บข้อมูลส่วนกลางบน Render + Supabase
+### เว็บข้อมูลส่วนกลางบน Cloudflare + Neon
 
-`server/` เป็นเซิร์ฟเวอร์ Node.js (Express) ที่เปิดหน้าเว็บและ API เก็บข้อมูลใน Postgres (Supabase)
-ทุกคนที่เปิดเว็บเห็นและแก้ข้อมูลชุดเดียวกัน การเปลี่ยนแปลงส่งถึงทุกหน้าที่เปิดอยู่ทันที (Server-Sent Events)
-ครั้งแรกที่เซิร์ฟเวอร์เริ่มทำงาน จะใส่ข้อมูลตัวอย่าง 26 งานให้
+`worker/` เป็น Cloudflare Worker ที่เปิดหน้าเว็บและ API เก็บข้อมูลใน Neon Postgres ทุกคนเห็นและแก้ข้อมูลชุดเดียวกัน
+หน้าเว็บเช็กการเปลี่ยนแปลงทุก 15 วินาที ครั้งแรกที่ใช้งานจะใส่ข้อมูลตัวอย่าง 26 งานให้
 
-```bash
-npm run build:server                                  # build หน้าเว็บโหมด API
-DATABASE_URL=postgres://... npm start                 # รันเซิร์ฟเวอร์ (พอร์ต 3000)
-```
+ตั้งค่าใน Cloudflare (Workers & Pages → Create → Import a repository):
+- Build command: `npm run build:server` · Deploy command: `npx wrangler deploy`
+- Settings → Variables and Secrets:
+  - `DATABASE_URL` (Secret): Neon connection string แบบ pooled
+  - `EDIT_PASSWORD` (Secret, ไม่บังคับ): รหัสผ่านทีมสำหรับแก้ไข
+  - `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` (ไม่บังคับ): เปิดล็อกอินด้วยอีเมลบริษัทผ่าน Cloudflare Access
+  - `EDITOR_EMAILS` (ไม่บังคับ): อีเมลที่แก้ไขได้ คั่นด้วยจุลภาค (ใช้คู่กับ Access)
 
-Deploy: Render → New → Blueprint → เลือก repo นี้ (`render.yaml`) → ใส่ `DATABASE_URL`
-เป็น connection string แบบ **Session pooler** จาก Supabase (Connect → Session pooler)
+ทดสอบในเครื่อง: สร้างไฟล์ `.dev.vars` ใส่ `DATABASE_URL=...` แล้ว `npm run dev:worker`
+
+`server/index.js` เป็นเซิร์ฟเวอร์ Node.js แบบเดียวกัน สำหรับรันบนเครื่องภายในองค์กร:
+`npm run build:server && DATABASE_URL=postgres://... npm start`
 
 ## โครงสร้าง
 
 - `src/lib/data.js` — ข้อมูลตั้งต้น, สีประจำโรง/สถานะ/ปัญหา, การบันทึก
 - `src/lib/view.js` — คำนวณตัวเลข, Top 5, Highlights, แนวโน้ม
-- `src/lib/store.js` — ที่เก็บข้อมูล 3 แบบ: localStorage / ฐานข้อมูล claude.ai / เซิร์ฟเวอร์ API
-- `server/` — เซิร์ฟเวอร์ Express + Postgres สำหรับ Render
+- `src/lib/store.js` — ที่เก็บข้อมูล 3 แบบ: localStorage / ฐานข้อมูล claude.ai / API (Cloudflare หรือ Node)
+- `server/core.js`, `server/api.js` — ตรรกะข้อมูลและ API ที่ใช้ร่วมกัน
+- `worker/` — Cloudflare Worker · `server/index.js` — เซิร์ฟเวอร์ Node.js
 - `src/components/` — Header, Summary, PlantCard, Insights, Modals
 - `src/styles.css` — สไตล์ทั้งหมด (ค่าสีตามงานออกแบบ)

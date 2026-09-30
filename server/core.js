@@ -1,9 +1,8 @@
-// Postgres storage. One table of JSON documents keyed by (collection, id), mirroring the
-// artifact store: jobs, photos (kept apart from jobs), plants, history (one row per day), meta.
-import crypto from 'node:crypto';
-import pg from 'pg';
+// Shared data logic for the Cloudflare Worker (worker/) and the Node server (server/index.js).
+// Postgres holds one table of JSON documents keyed by (collection, id): jobs, photos (kept apart
+// from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { PLANT_IDS, SEED, counts } from '../src/lib/data.js';
-import { iso, today0 } from '../src/lib/dates.js';
+import { iso } from '../src/lib/dates.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -11,6 +10,14 @@ const MAX_PHOTOS = 4;
 const MAX_PHOTO_CHARS = 400000;
 const STATUSES = ['pending', 'doing', 'done'];
 const BLOCKERS = ['none', 'part', 'permit', 'manpower', 'shutdown', 'vendor', 'budget'];
+
+// "Today" in Thailand (UTC+7, no DST), as a local-midnight Date like the client's today0(),
+// so trend snapshots and overdue checks roll over at Thai midnight on any server clock.
+const bangkokToday = () => {
+  const d = new Date(Date.now() + 7 * 3600e3);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+};
+const newId = (p) => `${p}${crypto.randomUUID()}`;
 
 const bad = (msg) => Object.assign(new Error(msg), { status: 400, expose: true });
 const str = (v, max = 500) => String(v ?? '').slice(0, max);
@@ -43,24 +50,25 @@ function cleanJob(id, b) {
   };
 }
 
-export function createDb(url) {
-  const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
-  const pool = new pg.Pool({ connectionString: url, ssl: local ? false : { rejectUnauthorized: false }, max: 5 });
+export const SCHEMA = `CREATE TABLE IF NOT EXISTS docs (
+  collection text NOT NULL, id text NOT NULL, data jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (collection, id))`;
 
-  const tx = async (fn) => {
-    const c = await pool.connect();
-    try {
-      await c.query('BEGIN');
-      const out = await fn(c);
-      await c.query('COMMIT');
-      return out;
-    } catch (e) {
-      await c.query('ROLLBACK').catch(() => {});
-      throw e;
-    } finally {
-      c.release();
-    }
-  };
+/** Run fn inside BEGIN/COMMIT on one pg client (Client, or a PoolClient). */
+export async function inTx(client, fn) {
+  await client.query('BEGIN');
+  try {
+    const out = await fn(client);
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  }
+}
+
+export function createDb(conn) {
+  const { tx } = conn;
   const put = (c, col, id, data) => c.query(
     `INSERT INTO docs (collection, id, data, updated_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
@@ -70,12 +78,12 @@ export function createDb(url) {
   const all = async (c, col) => (await c.query('SELECT id, data FROM docs WHERE collection = $1', [col])).rows;
 
   // Today's trend snapshot + last-updated time, recomputed from the stored jobs.
-  const stamp = async (c) => {
+  const stamp = async (c, by) => {
     const jobs = (await all(c, 'jobs')).map((r) => r.data);
-    const t = today0();
+    const t = bangkokToday();
     const p = Object.fromEntries(PLANT_IDS.map((id) => [id, counts(jobs.filter((j) => j.plant === id), t)]));
     await put(c, 'history', iso(t), { date: iso(t), ...counts(jobs, t), p });
-    await put(c, 'meta', 'app', { updatedAt: new Date().toISOString() });
+    await put(c, 'meta', 'app', { updatedAt: new Date().toISOString(), ...(by ? { updatedBy: by } : {}) });
   };
 
   const writeJob = async (c, job, photos) => {
@@ -83,16 +91,14 @@ export function createDb(url) {
     const keep = new Set(photos.filter((ph) => ph.id).map((ph) => ph.id));
     for (const r of existing.rows) if (!keep.has(r.id)) await del(c, 'photos', r.id);
     for (const ph of photos) {
-      if (!ph.id) await put(c, 'photos', `p${crypto.randomUUID()}`, { jobId: job.id, src: ph.src, date: ph.date });
+      if (!ph.id) await put(c, 'photos', newId('p'), { jobId: job.id, src: ph.src, date: ph.date });
     }
     await put(c, 'jobs', job.id, job);
   };
 
   return {
     async init() {
-      await pool.query(`CREATE TABLE IF NOT EXISTS docs (
-        collection text NOT NULL, id text NOT NULL, data jsonb NOT NULL,
-        updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (collection, id))`);
+      await conn.query(SCHEMA);
       // First start only: load the sample dashboard so the site opens populated.
       await tx(async (c) => {
         const seeded = await c.query("SELECT 1 FROM docs WHERE collection = 'meta' AND id = 'seeded'");
@@ -105,10 +111,16 @@ export function createDb(url) {
         await stamp(c);
       });
     },
-    ping: () => pool.query('SELECT 1'),
+    ping: () => conn.query('SELECT 1'),
+
+    // Cheap change check the browser polls; it fetches the full state only when this moves.
+    async version() {
+      const r = await conn.query("SELECT data FROM docs WHERE collection = 'meta' AND id = 'app'");
+      return { updatedAt: r.rows[0]?.data.updatedAt || null };
+    },
 
     async state() {
-      const rows = (await pool.query("SELECT collection, id, data FROM docs WHERE collection IN ('jobs','photos','plants','history','meta')")).rows;
+      const rows = (await conn.query("SELECT collection, id, data FROM docs WHERE collection IN ('jobs','photos','plants','history','meta')")).rows;
       const photos = {};
       rows.filter((r) => r.collection === 'photos').forEach((r) => (photos[r.data.jobId] ||= []).push({ id: r.id, src: r.data.src, date: r.data.date }));
       Object.values(photos).forEach((a) => a.sort((x, y) => x.date.localeCompare(y.date) || x.id.localeCompare(y.id)));
@@ -118,33 +130,34 @@ export function createDb(url) {
         plants: Object.fromEntries(rows.filter((r) => r.collection === 'plants').map((r) => [r.id, r.data])),
         history: rows.filter((r) => r.collection === 'history').map((r) => r.data).sort((a, b) => a.date.localeCompare(b.date)),
         updatedAt: meta?.data.updatedAt || null,
+        updatedBy: meta?.data.updatedBy || null,
       };
     },
 
-    saveJob(id, body) {
+    saveJob(id, body, by) {
       const { job, photos } = cleanJob(id, body);
-      return tx(async (c) => { await writeJob(c, job, photos); await stamp(c); });
+      return tx(async (c) => { await writeJob(c, job, photos); await stamp(c, by); });
     },
 
-    deleteJob(id) {
+    deleteJob(id, by) {
       if (!ID_RE.test(id)) throw bad('invalid job id');
       return tx(async (c) => {
         await c.query("DELETE FROM docs WHERE collection = 'photos' AND data->>'jobId' = $1", [id]);
         await del(c, 'jobs', id);
-        await stamp(c);
+        await stamp(c, by);
       });
     },
 
-    saveImpact(pid, impact) {
+    saveImpact(pid, impact, by) {
       if (!PLANT_IDS.includes(Number(pid))) throw bad('invalid plant');
       if (!Array.isArray(impact)) throw bad('impact must be a list');
-      return tx(async (c) => { await put(c, 'plants', String(pid), { impact: impact.slice(0, 20).map((s) => str(s)) }); await stamp(c); });
+      return tx(async (c) => { await put(c, 'plants', String(pid), { impact: impact.slice(0, 20).map((s) => str(s)) }); await stamp(c, by); });
     },
 
-    importData(d) {
+    importData(d, by) {
       if (!d || !Array.isArray(d.jobs)) throw bad('file must contain jobs');
       const cleaned = d.jobs.map((j) => {
-        const id = String(j.id || `j${crypto.randomUUID()}`).replace(/[^\w\-.~:@+]/g, '_').slice(0, 100);
+        const id = String(j.id || newId('j')).replace(/[^\w\-.~:@+]/g, '_').slice(0, 100);
         return cleanJob(id, { ...j, photos: (j.photos || []).map(({ src, date }) => ({ src, date })) });
       });
       return tx(async (c) => {
@@ -153,7 +166,7 @@ export function createDb(url) {
           if (PLANT_IDS.includes(Number(pid)) && Array.isArray(v?.impact)) await put(c, 'plants', String(pid), { impact: v.impact.map((s) => str(s)) });
         }
         for (const h of d.history || []) if (DATE_RE.test(h?.date)) await put(c, 'history', h.date, h);
-        await stamp(c);
+        await stamp(c, by);
       });
     },
   };

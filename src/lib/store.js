@@ -11,7 +11,8 @@ import { iso, today0 } from './dates.js';
  *      plants/<plantId>  { impact: string[] }
  *      history/<date>    { date, done, doing, stuck, p } — one snapshot per day for the trend
  *      meta/app          { updatedAt, updatedBy }
- *  - api: the Node server in server/ (Render build, `npm run build:server`), Postgres behind it.
+ *  - api: the Cloudflare Worker in worker/ (or the Node server in server/), Neon Postgres behind it.
+ *    Built with `npm run build:server`.
  *  - local: browser localStorage (plain website build), seeded with sample data.
  */
 
@@ -62,46 +63,87 @@ export function useDashboardStore() {
   /* eslint-enable react-hooks/rules-of-hooks */
 }
 
-/* ---------------- api (Node server + Postgres) ---------------- */
+/* ---------------- api (Cloudflare Worker or Node server + Postgres) ---------------- */
+
+const KEY_STORE = 'p1dash.editKey';
+const readKey = () => { try { return localStorage.getItem(KEY_STORE) || ''; } catch { return ''; } };
+const writeKey = (k) => { try { if (k) localStorage.setItem(KEY_STORE, k); else localStorage.removeItem(KEY_STORE); } catch { /* storage blocked */ } };
+const POLL_MS = 15000;
 
 function useApiStore() {
   const [status, setStatus] = useState('connecting');
-  const [data, setData] = useState({ jobs: [], plants: {}, history: [], updatedAt: null });
+  const [data, setData] = useState({ jobs: [], plants: {}, history: [], updatedAt: null, updatedBy: null });
+  const [me, setMe] = useState({ email: null, canWrite: null, needsKey: false });
+  const [editKey, setEditKey] = useState(readKey);
+  const versionRef = useRef(null);
 
   const load = useCallback(async () => {
     const r = await fetch('api/state', { cache: 'no-store' });
     if (!r.ok) throw new StoreError('unavailable');
-    setData(await r.json());
+    const d = await r.json();
+    versionRef.current = d.updatedAt;
+    setData(d);
     setStatus('ready');
   }, []);
 
   useEffect(() => {
     load().catch(() => setStatus('unavailable'));
-    // The server announces every change; the slow poll covers a dropped event stream.
-    const es = new EventSource('api/events');
-    es.addEventListener('change', () => { load().catch(() => {}); });
-    const t = setInterval(() => { load().catch(() => {}); }, 60000);
-    return () => { es.close(); clearInterval(t); };
+    fetch('api/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((m) => m && setMe(m)).catch(() => {});
+    // Poll a tiny version stamp while the tab is visible; fetch everything only when it changes.
+    const tick = async () => {
+      if (document.hidden) return;
+      try {
+        const r = await fetch('api/version', { cache: 'no-store' });
+        if (!r.ok) return;
+        const { updatedAt } = await r.json();
+        if (updatedAt !== versionRef.current) await load();
+      } catch { /* offline; try again next tick */ }
+    };
+    const t = setInterval(tick, POLL_MS);
+    const onVisible = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, [load]);
 
-  const send = async (method, url, body) => {
-    let r;
+  const request = async (method, url, body, key = editKey) => {
+    const headers = {};
+    if (body) headers['Content-Type'] = 'application/json';
+    if (key) headers['X-Edit-Key'] = key;
     try {
-      r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+      return await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     } catch {
       throw new StoreError('unavailable');
     }
-    if (!r.ok) throw new StoreError(r.status === 413 ? 'quota_exceeded' : r.status === 400 ? 'bad_request' : 'unavailable');
+  };
+
+  const send = async (method, url, body) => {
+    const r = await request(method, url, body);
+    if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
+    if (!r.ok) {
+      const code = { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
+      throw new StoreError(code);
+    }
     await load().catch(() => {});
+  };
+
+  // Check a team edit password with the server and remember it on this device.
+  const unlock = async (key) => {
+    const r = await request('POST', 'api/check-key', null, key);
+    if (r.status === 401) throw new StoreError('wrong_key');
+    if (!r.ok) throw new StoreError(r.status === 403 ? 'read_only' : 'unavailable');
+    writeKey(key);
+    setEditKey(key);
   };
 
   return {
     status,
     shared: true,
-    canWrite: true,
+    canWrite: me.canWrite,
+    needsKey: me.needsKey && !editKey,
+    unlock,
     data,
-    whoUpdated: '',
-    unavailableText: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ อาจกำลังเปิดเครื่อง (รอประมาณ 1 นาที) แล้วรีเฟรชหน้านี้',
+    whoUpdated: data.updatedBy || '',
+    unavailableText: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ด',
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
     deleteJob: (id) => send('DELETE', `api/jobs/${encodeURIComponent(id)}`),
     saveImpact: (pid, impact) => send('PUT', `api/plants/${pid}`, { impact }),
