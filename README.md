@@ -1,25 +1,37 @@
-# CODING AGENTS: READ THIS FIRST
+# P1 Repair Dashboard
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+แดชบอร์ดติดตามงานซ่อมเร่งด่วน (Priority 1) Top 5 ของโรงไฟฟ้า 5, 10, 6 และ 11 ในหน้าเดียว
+สำหรับผู้บริหารและทีมงาน — สร้างจากงานออกแบบ "P1 Repair Dashboard v2" (Claude Design, ดู `project/` และ `chats/`)
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+## ความสามารถ
 
-## What you should do — IMPORTANT
+- ตัวเลขรวม: ทั้งหมด / เสร็จแล้ว / กำลังดำเนินการ / ค้างหรือเกินกำหนด + Key Highlights สรุปอัตโนมัติ
+- การ์ดรายโรง: วงกลม % สำเร็จ, ผลกระทบต่อโรงไฟฟ้า, Top 5 งาน (ปัญหา, แนวทาง, ผู้รับผิดชอบ, ระยะเวลา, ความคืบหน้า, สิ่งที่ติด, รูปหน้างาน)
+- ตัวกรองเลือกดู: ทั้งหมด / รายกลุ่ม (5+10, 6+11) / รายโรง — เก็บใน URL (`?view=10`) จึงบุ๊กมาร์กหรือแชร์ลิงก์ได้
+- สรุปปัญหาที่ติด (Blocker) และกราฟแนวโน้ม
+- โหมด "อัปเดตงานประจำวัน": แก้ไข/เพิ่ม/ลบงาน, แก้ผลกระทบ, อัปโหลดรูปงานละไม่เกิน 4 รูป
+- ส่งออก / นำเข้าไฟล์ JSON เพื่อแชร์ข้อมูลชุดเดียวกันให้ทีม
+- สั่งพิมพ์ (Ctrl+P) เป็นหน้าเดียว A3 แนวนอน
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+> ข้อมูลบันทึกใน `localStorage` ของเบราว์เซอร์ที่แก้ไขเท่านั้น
+> หากต้องการให้ทุกคนเห็นข้อมูลเดียวกันแบบเรียลไทม์ ต้องเชื่อมต่อฐานข้อมูลกลาง (เช่น Google Sheet / Firebase / Supabase)
 
-**Read `project/P1 Repair Dashboard v2.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## พัฒนา
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # ไฟล์เว็บพร้อมใช้งานใน dist/
+npm run preview
+```
 
-## About the design files
+`dist/` เป็นเว็บแบบ static ใช้ path แบบ relative วางบนโฮสต์ใดก็ได้
+มี workflow `.github/workflows/deploy.yml` สำหรับ deploy ขึ้น GitHub Pages อัตโนมัติเมื่อ push เข้า `main`
+(ต้องตั้ง Settings → Pages → Source เป็น "GitHub Actions")
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+## โครงสร้าง
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
-
-## Bundle contents
-
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `แดชบอร์ดซ่อมโรงไฟฟ้า Priority 1` project files (HTML prototypes, assets, components)
+- `src/lib/data.js` — ข้อมูลตั้งต้น, สีประจำโรง/สถานะ/ปัญหา, การบันทึก
+- `src/lib/view.js` — คำนวณตัวเลข, Top 5, Highlights, แนวโน้ม
+- `src/components/` — Header, Summary, PlantCard, Insights, Modals
+- `src/styles.css` — สไตล์ทั้งหมด (ค่าสีตามงานออกแบบ)
