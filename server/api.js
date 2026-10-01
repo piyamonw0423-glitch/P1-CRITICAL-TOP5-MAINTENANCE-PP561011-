@@ -5,6 +5,8 @@
 //   EDIT_PASSWORD                    team password required for every change (sent as X-Edit-Key).
 //                                    Not set → the site is view-only, unless ALLOW_OPEN_EDIT=true (local testing).
 
+import { handleWebhook, lineConfigured, linePush, summaryText, verifyLineSignature } from './line.js';
+
 const enc = new TextEncoder();
 // Compare secrets without leaking their length/prefix through timing.
 const safeEqual = (a, b) => {
@@ -38,17 +40,25 @@ const fail = (status, error) => ({ status, json: { error } });
 
 /**
  * @param db    createDb(...) instance
- * @param req   { method, path, body, perm } — perm from permissions()
+ * @param req   { method, path, body, perm, env, rawBody, signature, url } — perm from permissions();
+ *              env/rawBody/signature/url are only needed for the LINE routes (url = site link for messages)
  * @returns     { status, json } — or { status, bytes, contentType } for a photo
  */
-export async function handleApi(db, { method, path, body, perm }) {
+export async function handleApi(db, { method, path, body, perm, env = {}, rawBody = '', signature = '', url = '' }) {
   const m = path.match(/^\/api\/(jobs|plants|photos)\/([^/]+)$/);
   const id = m ? decodeURIComponent(m[2]) : null;
   const isWrite = method !== 'GET' && method !== 'HEAD';
 
   try {
     if (method === 'GET' && path === '/api/health') { await db.ping(); return ok(); }
-    if (method === 'GET' && path === '/api/me') return ok({ email: perm.email, canWrite: perm.canWrite, needsKey: perm.needsKey, setup: perm.setup });
+    if (method === 'GET' && path === '/api/me') return ok({ email: perm.email, canWrite: perm.canWrite, needsKey: perm.needsKey, setup: perm.setup, line: lineConfigured(env) });
+    // LINE calls this with its own signature (no team password); replies are free and need no quota.
+    if (method === 'POST' && path === '/api/line/webhook') {
+      if (!env.LINE_CHANNEL_SECRET || !env.LINE_CHANNEL_ACCESS_TOKEN) return fail(404, 'not_found');
+      if (!(await verifyLineSignature(env.LINE_CHANNEL_SECRET, rawBody, signature))) return fail(401, 'bad_signature');
+      await handleWebhook(env, db, body, url).catch((e) => console.error('line webhook', e));
+      return ok();
+    }
     if (method === 'GET' && path === '/api/backlog') return ok(await db.backlog());
     if (method === 'GET' && path === '/api/stats') return ok({ days: await db.stats() });
     if (method === 'GET' && path === '/api/state') return ok(await db.state());
@@ -69,7 +79,30 @@ export async function handleApi(db, { method, path, body, perm }) {
       if (method === 'DELETE' && m?.[1] === 'jobs') { await db.deleteJob(id, by); return ok(); }
       if (method === 'PUT' && m?.[1] === 'plants') { await db.saveImpact(id, body?.impact, by); return ok(); }
       if (method === 'POST' && path === '/api/import') { await db.importData(body, by); return ok(); }
-      if (method === 'PUT' && path === '/api/backlog') { await db.saveBacklog(body, by); return ok(); }
+      if (method === 'POST' && path === '/api/line/test') {
+        if (!lineConfigured(env)) return fail(400, 'line_not_configured');
+        try {
+          await linePush(env, `✅ ทดสอบการแจ้งเตือนจาก TOP5 Maintenance Dashboard\n\n${summaryText({ days: await db.stats(2), backlog: await db.backlog(), url })}`);
+          return ok();
+        } catch (e) {
+          return fail(502, `line_failed:${e.lineStatus ?? ''}`);
+        }
+      }
+      if (method === 'PUT' && path === '/api/backlog') {
+        await db.saveBacklog(body, by);
+        // Summary to LINE after each upload; a LINE failure never fails the upload itself.
+        let line = 'off';
+        if (lineConfigured(env)) {
+          try {
+            await linePush(env, summaryText({ days: await db.stats(2), backlog: await db.backlog(), url }));
+            line = 'sent';
+          } catch (e) {
+            console.error('line push', e);
+            line = 'failed';
+          }
+        }
+        return ok({ ok: true, line });
+      }
     }
     return fail(404, 'not_found');
   } catch (e) {

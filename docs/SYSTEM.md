@@ -72,6 +72,7 @@ src/
 server/
   core.js                    ตรวจความถูกต้อง + อ่าน/เขียน Postgres (ใช้ร่วม Worker/Node)
   api.js                     router /api/* + สิทธิ์ (รหัสทีม, Access, editor list)
+  line.js                    LINE: ส่งสรุป, ตอบ "สรุป"/"id", ตรวจลายเซ็น webhook, เตือนเมื่อยังไม่อัปโหลด
   index.js                   เซิร์ฟเวอร์ Node/Express (สำรองไว้รันในองค์กร)
 worker/index.js              Cloudflare Worker: เสิร์ฟหน้าเว็บ + API, ต่อ Neon
 wrangler.jsonc               ตั้งค่า Worker (ชื่อ, build ก่อน deploy, workers.dev)
@@ -168,6 +169,8 @@ sequenceDiagram
 | GET | `/api/photos/:id` | ไฟล์รูป |
 | GET/PUT | `/api/backlog` | WO Backlog จาก CMMS (PUT = บันทึกชุดที่ merge แล้ว + บันทึกสถิติของวันใน transaction เดียว) |
 | GET | `/api/stats` | สถิติรายวัน 90 วันล่าสุด (เก่า → ใหม่) |
+| POST | `/api/line/test` | ส่งสรุปล่าสุดเข้า LINE เพื่อทดสอบ (ต้องใช้รหัสทีม) |
+| POST | `/api/line/webhook` | รับข้อความจาก LINE (ตรวจ `X-Line-Signature`) ตอบ "สรุป" / "id" |
 | POST | `/api/check-key` | ตรวจรหัสทีม |
 | PUT/DELETE | `/api/jobs/:id` | บันทึก/ลบงาน (เซิร์ฟเวอร์ปฏิเสธเลข WO ซ้ำ `duplicate_wo` และโรงเกิน 30 งาน `plant_full`) |
 | POST | `/api/jobs/delete` | ลบหลายงานใน transaction เดียว `{ ids }` (สูงสุด 200) |
@@ -235,6 +238,29 @@ sequenceDiagram
 - ปุ่ม **คัดลอกสรุปส่ง LINE**: ข้อความสรุปของวัน/ทีมที่เลือก + งานค้างนานสุด 10 อันดับ + ลิงก์เว็บ วางในแชต LINE ได้ทันที
 - ตามโรงที่เลือกในตัวกรองด้านบน · พื้นที่ ~10 KB/วัน (≈ 4 MB/ปี)
 
+### 8.3 แจ้งเตือน LINE (server/line.js)
+
+ส่งถึงผู้ดูแล (LINE_TO) ผ่าน LINE Official Account + Messaging API (LINE Notify ปิดบริการแล้ว 31 มี.ค. 2568)
+
+| เมื่อไร | ส่งอะไร | ใช้โควตา |
+|---|---|---|
+| ทุกครั้งที่อัปโหลดไฟล์ CMMS | สรุปของวัน: ใหม่/เริ่ม/เสร็จรอปิด/CLOSED, คงค้าง ±เทียบวันก่อน, แยกทีม, WO ใหม่ (สูงสุด 8) + ลิงก์ | 1 ข้อความ/ครั้ง |
+| 09:45 และ 16:15 (จ.–ส.) ถ้ายังไม่มีการอัปโหลดรอบนั้น | ⏰ เตือนให้อัปโหลด (เช้า = ตั้งแต่ 06:00, บ่าย = ตั้งแต่ 13:00) | เฉพาะวันที่ลืม |
+| พิมพ์ "สรุป" ในแชต OA | ตอบสรุปล่าสุด | ฟรี (reply) |
+| พิมพ์ "id" | ตอบรหัสผู้ใช้ LINE (ใช้ตั้ง LINE_TO) | ฟรี (reply) |
+| ปุ่ม "ทดสอบส่ง LINE" (โหมดแก้ไข) | ข้อความทดสอบ + สรุป | 1 ข้อความ |
+
+ประมาณ 44–60 ข้อความ/เดือน (แผนฟรีของ LINE OA ไทย ~200 ข้อความ/เดือน) · ส่ง LINE ไม่สำเร็จจะไม่ทำให้การอัปโหลดล้มเหลว (แจ้งในข้อความหลังอัปโหลด)
+
+**ตั้งค่า (ครั้งเดียว)**
+1. สร้าง LINE Official Account (https://manager.line.biz) → Settings → Messaging API → Enable (สร้าง Provider)
+2. LINE Developers Console (https://developers.line.biz/console) → เลือก channel → แท็บ Messaging API → Channel access token (long-lived) → Issue
+3. แท็บ Basic settings → คัดลอก **Channel secret** และ **Your user ID** (ขึ้นต้นด้วย U)
+4. สแกน QR ของ OA (แท็บ Messaging API) เพิ่มเป็นเพื่อน
+5. Cloudflare Worker → Settings → Variables and Secrets → เพิ่มแบบ **Secret**: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_TO` (= Your user ID), `LINE_CHANNEL_SECRET` → Deploy
+6. (ถ้าต้องการให้ตอบ "สรุป") Messaging API → Webhook URL = `https://<เว็บ>/api/line/webhook` → Verify → เปิด Use webhook · LINE OA Manager → ปิด Auto-response
+7. เว็บ → โหมดแก้ไข → "ทดสอบส่ง LINE"
+
 | กลุ่มสถานะ | รหัส CMMS |
 |---|---|
 | รอวางแผน/อนุมัติ | WPLAN, WAPPR, WAPPR_L1, WAPPR_L2, WAPPR_L3, RETURNED, REJECTED, WSHUT |
@@ -280,6 +306,7 @@ npm run dev:worker                  # Worker + ฐานข้อมูลจร
 | ไม่มีปุ่ม "อัปเดตงานประจำวัน" (ป้าย "ยังไม่ได้ตั้งรหัสทีม") | ยังไม่ตั้ง `EDIT_PASSWORD` | ตั้ง Secret ใน Cloudflare → Deploy → Ctrl+Shift+R |
 | "รหัสผ่านทีมไม่ถูกต้อง" ทั้งที่ตั้งถูก | ตัวพิมพ์ใหญ่/เล็ก, แป้นพิมพ์ภาษาไทย, ค่าใน Secret ไม่ตรงที่คิด | ติ๊ก "แสดงรหัส" ตรวจ · ถ้ายังไม่ได้ ตั้ง Secret ใหม่โดยพิมพ์เอง |
 | หน้าเปล่า "ยังไม่มีงาน P1" | ไม่มีทั้งงาน Top 5 และข้อมูล CMMS | อัปโหลด WO Backlog (CMMS) · อย่ากด "ย้ายข้อมูลจากเครื่องนี้" ถ้าไม่ต้องการข้อมูลตัวอย่างเก่า |
+| "ส่ง LINE ไม่สำเร็จ" | token ผิด/หมดอายุ, LINE_TO ผิด, ยังไม่เพิ่ม OA เป็นเพื่อน, โควตาเดือนนี้หมด | ออก token ใหม่, ตรวจ Your user ID, เพิ่มเพื่อน, ดูโควตาใน LINE OA Manager |
 | "No URLs enabled" ใน Cloudflare | ยังไม่เปิด workers.dev | Settings → Domains & Routes → workers.dev → Enable |
 
 ## 11. บันทึกการทำงาน (30 ก.ย. – 1 ต.ค. 2569)
@@ -311,7 +338,8 @@ npm run dev:worker                  # Worker + ฐานข้อมูลจร
 | 1 ต.ค. 04:57 | `ef5a423` | ลบ Top 5 หมดแล้วหน้าแดชบอร์ดยังอยู่ (ถ้ามีข้อมูล CMMS) ไม่เด้งเป็นหน้าเปล่า |
 | 1 ต.ค. 08:02 | `2a7c0dd` | แยก 2 รายการต่อโรง: Top 5 ความเสี่ยงเครื่องจักร (BD) / Top 5 งานประจำวัน (ฟิลด์ `list`, งานเดิม = BD) · เพิ่มงานเกิน 5 ได้ (โชว์ 5 อันดับแรก ที่เกินพับไว้, เพดาน 30 งาน/โรง) · ปุ่ม ▲▼ จัดอันดับ (`POST /api/jobs/rank`) · Excel มีคอลัมน์ "รายการ" |
 | 1 ต.ค. 11:10 | `73e36ff` | ลากวางเปลี่ยนลำดับงาน (จับที่เลขอันดับหรือ ⠿, ใช้ได้ทั้งเมาส์และนิ้วบนมือถือ, เส้นบอกตำแหน่งที่จะวาง) |
-| 1 ต.ค. | — | รายงานประจำวัน CMMS (Performance ทีม): บันทึกสถิติทุกครั้งที่อัปโหลด, แยกทีมจาก WO_Worklocation, กราฟเริ่มงาน vs CLOSED + คงค้าง, ปุ่มคัดลอกสรุปส่ง LINE |
+| 1 ต.ค. | `e6b9ed2` | รายงานประจำวัน CMMS (Performance ทีม): บันทึกสถิติทุกครั้งที่อัปโหลด, แยกทีมจาก WO_Worklocation, กราฟเริ่มงาน vs CLOSED + คงค้าง, ปุ่มคัดลอกสรุปส่ง LINE |
+| 1 ต.ค. | — | แจ้งเตือน LINE ถึงผู้ดูแล: สรุปหลังอัปโหลดทุกครั้ง, เตือน 09:45/16:15 ถ้ายังไม่อัปโหลด (Cron Triggers), ตอบ "สรุป"/"id" ผ่าน webhook, ปุ่มทดสอบส่ง LINE |
 
 ## 12. Roadmap
 
@@ -344,7 +372,7 @@ flowchart LR
 
 **ระยะ 5 — รายงานและแจ้งเตือน**
 - ประวัติการแก้ไข (ใครแก้อะไร เมื่อไหร่) และไทม์ไลน์สถานะ CMMS ของแต่ละ WO (ต่อยอดจาก prevStatus/statusSince)
-- แจ้งเตือน LINE ถึงผู้ดูแล (1 คน, LINE OA แผนฟรี ~200 ข้อความ/เดือน เพียงพอ): สรุปหลังอัปโหลดรอบ 09:30/16:00 + WO P1 ใหม่ทันที + เตือนเมื่อยังไม่ได้อัปโหลด
+- ✅ แจ้งเตือน LINE ถึงผู้ดูแล (สรุปหลังอัปโหลด + WO ใหม่ + เตือนเมื่อยังไม่ได้อัปโหลด) — ต่อยอด: ส่งถึงหัวหน้าทีมรายคนเมื่อโควตาพอ
 - สรุปรายสัปดาห์เป็น PDF/สไลด์สำหรับประชุมผู้บริหาร (แยก BD / งานประจำวัน)
 - ย้ายรูปไปเก็บ Cloudflare R2 (10 GB ฟรี) เมื่อรูปเยอะ
 

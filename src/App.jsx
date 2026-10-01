@@ -27,6 +27,8 @@ const readView = () => {
 };
 
 const ERROR_TEXT = {
+  line_not_configured: 'ยังไม่ได้ตั้งค่า LINE (LINE_CHANNEL_ACCESS_TOKEN และ LINE_TO ใน Cloudflare)',
+  line_failed: 'ส่ง LINE ไม่สำเร็จ ตรวจ token / LINE_TO และว่าได้เพิ่ม LINE OA เป็นเพื่อนแล้ว',
   invalid_argument: 'คุณไม่มีสิทธิ์แก้ไขข้อมูลในหน้านี้ ขอสิทธิ์ผู้แก้ไขจากเจ้าของหน้า',
   quota_exceeded: 'พื้นที่จัดเก็บเต็ม กรุณาลบรูปเก่าบางรูปแล้วลองใหม่',
   resource_exhausted: 'บันทึกถี่เกินไป รอสักครู่แล้วลองใหม่',
@@ -132,10 +134,10 @@ export default function App() {
   const run = async (fn, okText) => {
     setBusy(true);
     try {
-      await fn();
+      const res = await fn();
       setModal(null);
       setAsk(null);
-      setToast({ text: okText });
+      setToast({ text: typeof okText === 'function' ? okText(res) : okText });
     } catch (e) {
       setAsk(null);
       setToast({ text: errorText(e), error: true });
@@ -294,7 +296,8 @@ export default function App() {
         }}
       />
       {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onUploadBacklog={uploadBacklogFile} onReset={resetData}
-        dupeCount={dupeGroups.reduce((n, g) => n + g.remove.length, 0)} onDedupe={() => setDedupe(dupeGroups)} />}
+        dupeCount={dupeGroups.reduce((n, g) => n + g.remove.length, 0)} onDedupe={() => setDedupe(dupeGroups)}
+        onTestLine={store.line ? () => run(() => store.testLine(), 'ส่งข้อความทดสอบเข้า LINE แล้ว') : null} />}
 
       <main className="main">
         {status === 'connecting' && (
@@ -423,7 +426,8 @@ export default function App() {
             const msg = store.backlog
               ? `อัปเดต WO Backlog แล้ว · ใหม่ ${merge.added} · สถานะเปลี่ยน ${merge.changed.length}${merge.removed ? ` · ลบ ${merge.removed}` : ''}`
               : `อัปโหลด WO Backlog แล้ว · ${merge.rows.length} WO`;
-            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows }), msg);
+            const lineNote = { sent: ' · ส่งสรุปเข้า LINE แล้ว', failed: ' · ส่ง LINE ไม่สำเร็จ (ตรวจ token/LINE_TO)' };
+            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows }), (res) => msg + (lineNote[res?.line] || ''));
             setBacklogUp(null);
           }}
         />

@@ -26,12 +26,16 @@ const db = createDb({
 await db.init();
 
 const app = express();
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: '20mb', verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); } }));
 
 // No Cloudflare Access here, so no verified email; EDIT_PASSWORD still applies.
 app.use('/api', async (req, res) => {
   const perm = permissions(process.env, null, req.get('X-Edit-Key'));
-  const r = await handleApi(db, { method: req.method, path: req.baseUrl + req.path, body: req.body, perm });
+  // LINE webhook signatures need the raw body; express.json keeps it in req.rawBody (see verify below).
+  const r = await handleApi(db, {
+    method: req.method, path: req.baseUrl + req.path, body: req.body, perm, env: process.env,
+    rawBody: req.rawBody || '', signature: req.get('X-Line-Signature') || '', url: process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}/`,
+  });
   if (r.bytes) {
     res.set({ 'Content-Type': r.contentType, 'Cache-Control': 'private, max-age=31536000, immutable' }).status(r.status).send(Buffer.from(r.bytes));
     return;

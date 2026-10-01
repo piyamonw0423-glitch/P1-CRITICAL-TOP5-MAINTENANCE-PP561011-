@@ -5,6 +5,7 @@ import { Client as NeonClient } from '@neondatabase/serverless';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createDb, inTx } from '../server/core.js';
 import { handleApi, permissions } from '../server/api.js';
+import { lineConfigured, remindIfNoUpload } from '../server/line.js';
 
 let initialized = false; // schema + first-run seed, once per isolate
 let jwks = null;
@@ -61,11 +62,14 @@ export default {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
 
-    let email;
-    try {
-      email = await accessEmail(request, env);
-    } catch {
-      return json(401, { error: 'login_required' });
+    // LINE's servers cannot log in to Cloudflare Access; that route is protected by its signature instead.
+    let email = null;
+    if (url.pathname !== '/api/line/webhook') {
+      try {
+        email = await accessEmail(request, env);
+      } catch {
+        return json(401, { error: 'login_required' });
+      }
     }
     if (!env.DATABASE_URL) return json(503, { error: 'database_unavailable', detail: 'DATABASE_URL is not set' });
 
@@ -77,9 +81,15 @@ export default {
       stage = 'query';
       const db = createDb({ query: (t, p) => client.query(t, p), tx: (fn) => inTx(client, fn) });
       if (!initialized) { await within(db.init(), 20000, 'database setup'); initialized = true; }
-      const body = request.method === 'PUT' || request.method === 'POST' ? await request.json().catch(() => null) : null;
+      // Raw text is kept for the LINE webhook signature check.
+      const rawBody = request.method === 'PUT' || request.method === 'POST' ? await request.text().catch(() => '') : '';
+      let body = null;
+      try { body = rawBody ? JSON.parse(rawBody) : null; } catch { body = null; }
       const perm = permissions(env, email, request.headers.get('X-Edit-Key'));
-      const r = await within(handleApi(db, { method: request.method, path: url.pathname, body, perm }), 20000, 'database query');
+      const site = env.PUBLIC_URL || `${url.origin}/`;
+      const r = await within(handleApi(db, {
+        method: request.method, path: url.pathname, body, perm, env, rawBody, signature: request.headers.get('X-Line-Signature') || '', url: site,
+      }), 20000, 'database query');
       return toResponse(r);
     } catch (e) {
       console.error(e);
@@ -87,5 +97,21 @@ export default {
     } finally {
       if (client) ctx.waitUntil(client.end().catch(() => {}));
     }
+  },
+
+  // Cron Triggers (wrangler.jsonc): LINE reminder when the 09:30 / 16:00 CMMS upload is missing.
+  async scheduled(event, env, ctx) {
+    if (!lineConfigured(env) || !env.DATABASE_URL) return;
+    ctx.waitUntil((async () => {
+      const client = await connectDb(env.DATABASE_URL);
+      try {
+        const db = createDb({ query: (t, p) => client.query(t, p), tx: (fn) => inTx(client, fn) });
+        await within(remindIfNoUpload(env, db, event.scheduledTime, env.PUBLIC_URL || ''), 20000, 'reminder');
+      } catch (e) {
+        console.error('scheduled reminder', reason(e));
+      } finally {
+        await client.end().catch(() => {});
+      }
+    })());
   },
 };

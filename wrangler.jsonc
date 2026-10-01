@@ -5,6 +5,8 @@
 //   EDIT_PASSWORD (secret, optional)      team password for editing
 //   ACCESS_TEAM_DOMAIN, ACCESS_AUD        optional Cloudflare Access login (company email)
 //   EDITOR_EMAILS (optional)              comma-separated editors when Access is on
+//   LINE_CHANNEL_ACCESS_TOKEN, LINE_TO    (secrets, optional) LINE summary after each CMMS upload + reminders
+//   LINE_CHANNEL_SECRET                   (secret, optional) LINE webhook: replies to "สรุป" / "id"
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "p1-critical-top5-maintenance-pp561011",
@@ -25,5 +27,9 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  // Link used in LINE messages sent by the cron reminder (requests use their own origin).
+  "vars": { "PUBLIC_URL": "https://p1-critical-top5-maintenance-pp561011.piyamon-w0423.workers.dev/" },
+  // LINE reminder if the CMMS file was not uploaded: 09:45 and 16:15 Thai time (02:45 / 09:15 UTC), Mon–Sat.
+  "triggers": { "crons": ["45 2 * * MON-SAT", "15 9 * * MON-SAT"] },
   "observability": { "enabled": true }
 }

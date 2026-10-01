@@ -170,11 +170,14 @@ function useApiStore() {
     if (!r.ok) {
       const b = await r.json().catch(() => ({}));
       const code = String(b.error || '').startsWith('plant_full') ? 'plant_full'
-        : b.error === 'no_password' || b.error === 'duplicate_wo' ? b.error
+        : b.error === 'no_password' || b.error === 'duplicate_wo' || b.error === 'line_not_configured' ? b.error
+          : String(b.error || '').startsWith('line_failed') ? 'line_failed'
           : { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
       throw new StoreError(code, b.error, b.detail || b.error || `HTTP ${r.status}`);
     }
+    const out = await r.json().catch(() => ({}));
     await load().catch(() => {});
+    return out;
   };
 
   // Check a team edit password with the server and remember it on this device.
@@ -197,6 +200,8 @@ function useApiStore() {
     backlog,
     stats,
     uploadBacklog: (b) => send('PUT', 'api/backlog', b),
+    line: !!me.line, // LINE notifications configured on the server
+    testLine: () => send('POST', 'api/line/test'),
     whoUpdated: data.updatedBy || '',
     unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
