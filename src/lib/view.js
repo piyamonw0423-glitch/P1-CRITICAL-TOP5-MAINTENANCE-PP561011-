@@ -1,4 +1,4 @@
-import { BLOCK, DONE, DOING, FILTERS, GROUPS, PLANT_IDS, PLANT_META, STATUS, STUCK, bucket, counts } from './data.js';
+import { BLOCK, DONE, DOING, FILTERS, GROUPS, LISTS, PLANT_IDS, PLANT_META, STATUS, STUCK, TOP_N, bucket, counts, listOf } from './data.js';
 import { daysBetween, iso, pd, range, thD } from './dates.js';
 import { groupOf, isClosedGroup, kpiBucket, normWo, summarize } from './cmms.js';
 
@@ -43,11 +43,24 @@ export function plantView(data, pid, t, backlog = null) {
   const woRows = backlog ? backlog.rows.filter((r) => r.plant === pid) : null;
   const all = data.jobs.filter((j) => j.plant === pid);
   const c = counts(all, t);
-  // Shown: up to 5 unfinished jobs by rank. Collapsed behind a toggle: finished jobs and any extra open ones.
-  const byRank = (a, b) => a.rank - b.rank;
-  const open = all.filter((j) => j.status !== 'done').sort(byRank);
-  const top = open.slice(0, 5);
-  const rest = open.slice(5).concat(all.filter((j) => j.status === 'done').sort(byRank));
+  // Per list: the first TOP_N unfinished jobs by rank are shown; extra open jobs and finished ones fold behind a toggle.
+  const byRank = (a, b) => (a.rank || 99) - (b.rank || 99) || String(a.id).localeCompare(String(b.id));
+  const lists = LISTS.map((l) => {
+    const jobs = all.filter((j) => listOf(j) === l.k);
+    const open = jobs.filter((j) => j.status !== 'done').sort(byRank);
+    const top = open.slice(0, TOP_N);
+    const rest = open.slice(TOP_N).concat(jobs.filter((j) => j.status === 'done').sort(byRank));
+    return {
+      ...l,
+      total: jobs.length,
+      openIds: open.map((j) => j.id), // current order, used by the ▲▼ buttons
+      top: top.map((j, i) => jobRow(j, i, pid, t, cmmsIdx)),
+      rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t, cmmsIdx)),
+      more: rest.length,
+      moreOpen: open.length - top.length,
+      moreDone: rest.length - (open.length - top.length),
+    };
+  });
   return {
     id: pid,
     name: `โรงไฟฟ้า ${pid}`,
@@ -56,11 +69,9 @@ export function plantView(data, pid, t, backlog = null) {
     ...c,
     pct: pctOf(c.done, all.length),
     impact: data.plants[pid]?.impact || [],
-    top: top.map((j, i) => jobRow(j, i, pid, t, cmmsIdx)),
-    rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t, cmmsIdx)),
+    lists,
+    jobIds: all.map((j) => j.id),
     wo: woRows ? summarize(woRows) : null,
-    more: rest.length,
-    moreDone: rest.filter((j) => j.status === 'done').length,
   };
 }
 

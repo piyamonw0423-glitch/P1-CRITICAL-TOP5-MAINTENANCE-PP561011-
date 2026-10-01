@@ -6,7 +6,7 @@ import { BlockerSummary, TrendPanel } from './components/Insights.jsx';
 import { ImpactModal, JobModal, Lightbox } from './components/Modals.jsx';
 import { ConfirmDialog, PasswordDialog, Toast } from './components/Feedback.jsx';
 import { EmptyState, StatusPanel } from './components/States.jsx';
-import { FILTERS, MAX_JOBS_PER_PLANT } from './lib/data.js';
+import { FILTERS, MAX_JOBS_PER_PLANT, listOf } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
 import { readLocalBackup, useDashboardStore } from './lib/store.js';
@@ -144,13 +144,15 @@ export default function App() {
     }
   };
 
-  const openNew = (pid) => {
+  // Next rank at the bottom of one plant's list.
+  const nextRank = (pid, list) => 1 + Math.max(0, ...data.jobs.filter((j) => j.plant === pid && listOf(j) === list).map((j) => j.rank || 0));
+
+  const openNew = (pid, list = 'risk') => {
     const e = new Date(t);
     e.setDate(e.getDate() + 7);
-    const rank = data.jobs.filter((j) => j.plant === pid).length + 1;
     setModal({
       type: 'job',
-      job: { id: null, wo: '', plant: pid, rank, issue: '', action: '', owner: '', team: '', start: iso(t), end: iso(e), progress: 0, status: 'pending', blocker: 'none', note: '', photos: [] },
+      job: { id: null, wo: '', plant: pid, list, rank: nextRank(pid, list), issue: '', action: '', owner: '', team: '', start: iso(t), end: iso(e), progress: 0, status: 'pending', blocker: 'none', note: '', photos: [] },
     });
   };
 
@@ -221,10 +223,11 @@ export default function App() {
     const existing = data.jobs.find((j) => j.wo && normWo(j.wo) === normWo(row.wo));
     if (existing) { setFlashId(existing.id); return; }
     if (data.jobs.filter((j) => j.plant === row.plant).length >= MAX_JOBS_PER_PLANT) {
-      setToast({ text: `โรงไฟฟ้า ${row.plant} มีงานใน Top 5 ครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือปิดงานเดิมก่อน`, error: true });
+      setToast({ text: `โรงไฟฟ้า ${row.plant} มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือปิดงานเดิมก่อน`, error: true });
       return;
     }
-    setModal({ type: 'job', job: jobFromWo(row, t, data.jobs.filter((j) => j.plant === row.plant).length + 1) });
+    // Goes to the machine-risk list by default; the form lets the user switch to daily work.
+    setModal({ type: 'job', job: { ...jobFromWo(row, t, nextRank(row.plant, 'risk')), list: 'risk' } });
   };
 
   const importFile = async (f) => {
@@ -342,7 +345,8 @@ export default function App() {
                         selected={selected}
                         onSelect={selectJobs}
                         onEditJob={(job) => setModal({ type: 'job', job })}
-                        onAddJob={() => openNew(p.id)}
+                        onAddJob={(list) => openNew(p.id, list)}
+                        onReorder={(ids) => { if (!busy) run(() => store.reorderJobs(ids), 'จัดอันดับแล้ว'); }}
                         onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
                         onPhoto={setLightbox}
                         onOpenBacklog={(plant) => setBacklogFocus({ plant, n: Date.now() })}

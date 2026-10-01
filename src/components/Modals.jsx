@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Icon from '../lib/icons.jsx';
-import { MAX_JOBS_PER_PLANT, PLANT_META } from '../lib/data.js';
+import { LISTS, MAX_JOBS_PER_PLANT, PLANT_META, listOf } from '../lib/data.js';
 import { iso, pd, thD, today0 } from '../lib/dates.js';
 import { shrinkImage } from '../lib/photos.js';
 import { sameWo } from '../lib/dedupe.js';
@@ -66,7 +66,7 @@ function Field({ label, wide, children }) {
 }
 
 export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }) {
-  const [d, setD] = useState(() => ({ photos: [], ...initial, plant: String(initial.plant) }));
+  const [d, setD] = useState(() => ({ photos: [], ...initial, list: listOf(initial), plant: String(initial.plant) }));
   const [err, setErr] = useState('');
   const [plantErr, setPlantErr] = useState('');
   const [woErr, setWoErr] = useState('');
@@ -127,7 +127,12 @@ export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }
           </select>
           {plantErr && <span className="field-error">{plantErr}</span>}
         </Field>
-        <Field label="ลำดับความสำคัญ (1 = สำคัญสุด)">
+        <Field label="รายการ">
+          <select className="field" value={d.list} onChange={set('list')}>
+            {LISTS.map((l) => <option key={l.k} value={l.k}>Top 5 {l.label}</option>)}
+          </select>
+        </Field>
+        <Field label="อันดับในรายการ (1 = สำคัญสุด · จัดด้วย ▲▼ ได้)">
           <input className="field" type="number" min="1" value={d.rank} onChange={set('rank')} />
         </Field>
         <Field label="เลข WO (Work Order)">

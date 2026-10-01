@@ -2,8 +2,16 @@ import { iso, today0 } from './dates.js';
 
 export const STORAGE_KEY = 'p1dash.v2';
 export const PLANT_IDS = [5, 10, 6, 11];
-// Jobs allowed per plant (the dashboard tracks a Top 5). Change here to raise the limit everywhere.
-export const MAX_JOBS_PER_PLANT = 5;
+// Each plant keeps two ranked lists; the first TOP_N open jobs of each are shown, the rest fold away.
+export const TOP_N = 5;
+// Safety cap on jobs per plant (both lists together), enforced in the UI, every store, the server and Excel import.
+export const MAX_JOBS_PER_PLANT = 30;
+export const LISTS = [
+  { k: 'risk', label: 'ความเสี่ยงเครื่องจักร (BD)', tab: 'ความเสี่ยง BD' },
+  { k: 'daily', label: 'งานประจำวัน', tab: 'งานประจำวัน' },
+];
+// Jobs saved before the lists existed belong to the machine-risk list.
+export const listOf = (j) => (j?.list === 'daily' ? 'daily' : 'risk');
 
 export const DONE = 'oklch(0.62 0.16 150)';
 export const DOING = 'oklch(0.8 0.15 80)';

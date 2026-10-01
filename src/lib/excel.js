@@ -1,6 +1,6 @@
 // Excel (.xlsx) export/import for the dashboard. The exported file doubles as the template:
 // edit rows in Excel, then import it back. Libraries load on demand to keep the page small.
-import { BLOCK, MAX_JOBS_PER_PLANT, PLANT_IDS, STATUS } from './data.js';
+import { BLOCK, LISTS, MAX_JOBS_PER_PLANT, PLANT_IDS, STATUS, TOP_N, listOf } from './data.js';
 import { iso } from './dates.js';
 
 export const JOB_SHEET = 'งาน P1';
@@ -9,6 +9,7 @@ export const IMPACT_SHEET = 'ผลกระทบ';
 // [header, field, column width]
 const COLS = [
   ['โรงไฟฟ้า', 'plant', 10],
+  ['รายการ', 'list', 24],
   ['ลำดับ', 'rank', 8],
   ['เลข WO', 'wo', 16],
   ['ปัญหาเครื่องจักร', 'issue', 42],
@@ -25,6 +26,16 @@ const COLS = [
 
 const STATUS_BY_LABEL = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [v.label, k]));
 const BLOCK_BY_LABEL = Object.fromEntries(Object.entries(BLOCK).map(([k, v]) => [v.label, k]));
+// Accepts the list label, its tab name, the key, or a short word (BD / ประจำวัน).
+const listFromCell = (s) => {
+  const v = s.trim().toLowerCase();
+  if (!v) return 'risk';
+  const hit = LISTS.find((l) => [l.k, l.label, l.tab].some((x) => x.toLowerCase() === v));
+  if (hit) return hit.k;
+  if (/ประจำวัน|daily/.test(v)) return 'daily';
+  if (/bd|ความเสี่ยง|risk/.test(v)) return 'risk';
+  return null;
+};
 const HEAD = { fontWeight: 'bold', backgroundColor: '#1B2A4A', color: '#FFFFFF', align: 'center' };
 
 // Excel stores dates without a time zone; build them in UTC so no offset creeps in.
@@ -34,12 +45,14 @@ const toExcelDate = (s) => { const [y, m, d] = s.split('-').map(Number); return 
 export async function buildWorkbook(data) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
   const order = (p) => PLANT_IDS.indexOf(p);
-  const jobs = [...data.jobs].sort((a, b) => order(a.plant) - order(b.plant) || a.rank - b.rank);
+  const lo = (j) => LISTS.findIndex((l) => l.k === listOf(j));
+  const jobs = [...data.jobs].sort((a, b) => order(a.plant) - order(b.plant) || lo(a) - lo(b) || a.rank - b.rank);
   const jobRows = [
     COLS.map(([h]) => ({ value: h, ...HEAD })),
     ...jobs.map((j) => COLS.map(([, f]) => {
       if (f === 'start' || f === 'end') return j[f] ? { value: toExcelDate(j[f]), format: 'dd/mm/yyyy' } : null;
       if (f === 'status') return STATUS[j.status]?.label || '';
+      if (f === 'list') return LISTS.find((l) => l.k === listOf(j)).label;
       if (f === 'blocker') return (BLOCK[j.blocker] || BLOCK.none).label;
       if (f === 'plant' || f === 'rank' || f === 'progress') return Number(j[f]) || 0;
       return j[f] ? String(j[f]) : null;
@@ -53,12 +66,14 @@ export async function buildWorkbook(data) {
     [{ value: 'วิธีใช้ไฟล์นี้', fontWeight: 'bold' }],
     ['1. แก้ไข เพิ่ม หรือลบแถวในชีต "งาน P1" (1 แถว = 1 งาน) ห้ามแก้ชื่อหัวคอลัมน์'],
     ['2. ช่องที่ต้องกรอก: โรงไฟฟ้า, ปัญหาเครื่องจักร, วันกำหนดเสร็จ · ช่องอื่นเว้นว่างได้'],
-    [`   แต่ละโรงมีได้ไม่เกิน ${MAX_JOBS_PER_PLANT} งาน`],
+    [`   แต่ละโรงมี 2 รายการ (ความเสี่ยงเครื่องจักร BD / งานประจำวัน) หน้าเว็บโชว์ ${TOP_N} อันดับแรกของแต่ละรายการ ที่เกินพับไว้ · รวมไม่เกิน ${MAX_JOBS_PER_PLANT} งานต่อโรง`],
     ['3. งานที่มีเลข WO ตรงกับในเว็บจะถูกอัปเดต งานที่ไม่ตรงจะถูกเพิ่มใหม่ (รูปหน้างานเดิมไม่หาย)'],
     ['4. บันทึกไฟล์เป็น .xlsx แล้วในเว็บกด "อัปเดตงานประจำวัน" → "นำเข้า Excel"'],
     [''],
     [{ value: 'ค่าที่ใช้ได้', fontWeight: 'bold' }],
     ['โรงไฟฟ้า', PLANT_IDS.join(', ')],
+    ['รายการ', LISTS.map((l) => l.label).join(', ') + ' (เว้นว่าง = ความเสี่ยงเครื่องจักร BD)'],
+    ['ลำดับ', 'อันดับในรายการของโรงนั้น 1 = สำคัญสุด (เว้นว่าง = ต่อท้าย)'],
     ['สถานะ', Object.values(STATUS).map((s) => s.label).join(', ') + ' (เว้นว่าง = คำนวณจากความคืบหน้า)'],
     ['ติดปัญหา', Object.values(BLOCK).map((b) => b.label).join(', ')],
     ['วันที่', 'วว/ดด/ปปปป (ค.ศ. หรือ พ.ศ. ก็ได้) หรือ ปปปป-ดด-วว'],
@@ -144,15 +159,20 @@ export async function parseWorkbook(file) {
     const blocker = BLOCK_BY_LABEL[bl] || (BLOCK[bl] ? bl : bl ? null : 'none');
     if (!blocker) problems.push(`ติดปัญหา "${bl}" ไม่รู้จัก`);
 
+    const list = listFromCell(text(get('list')));
+    if (!list) problems.push(`รายการ "${text(get('list'))}" ไม่รู้จัก (ใช้ ${LISTS.map((l) => l.label).join(' หรือ ')})`);
+
     const woKey = text(get('wo')).replace(/\s+/g, '').toUpperCase();
     if (woKey && woRow.has(woKey)) problems.push(`เลข WO "${text(get('wo'))}" ซ้ำกับแถว ${woRow.get(woKey)}`);
     else if (woKey) woRow.set(woKey, row);
 
     if (problems.length) { errors.push({ row, msg: problems.join(' · ') }); return; }
-    nextRank[plant] = (nextRank[plant] || 0) + 1;
+    const rk = `${plant}|${list}`;
+    nextRank[rk] = (nextRank[rk] || 0) + 1;
     jobs.push({
       plant,
-      rank: Math.max(1, parseInt(text(get('rank')), 10) || nextRank[plant]),
+      list,
+      rank: Math.max(1, parseInt(text(get('rank')), 10) || nextRank[rk]),
       wo: text(get('wo')),
       issue,
       action: text(get('action')),

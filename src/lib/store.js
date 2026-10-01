@@ -188,6 +188,7 @@ function useApiStore() {
     unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
     deleteJob: (id) => send('DELETE', `api/jobs/${encodeURIComponent(id)}`),
+    reorderJobs: (ids) => send('POST', 'api/jobs/rank', { ids }),
     // Bulk delete in chunks (one transaction each) so large clean-ups can report progress.
     deleteJobs: async (ids, onProgress) => {
       const CHUNK = 10;
@@ -238,6 +239,7 @@ function useLocalStore() {
       commit({ ...data, jobs: exists ? data.jobs.map((j) => (j.id === job.id ? job : j)) : data.jobs.concat([job]) });
     },
     deleteJob: async (id) => commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }),
+    reorderJobs: async (ids) => commit({ ...data, jobs: data.jobs.map((j) => (ids.includes(j.id) ? { ...j, rank: ids.indexOf(j.id) + 1 } : j)) }),
     deleteJobs: async (ids, onProgress) => { commit({ ...data, jobs: data.jobs.filter((j) => !ids.includes(j.id)) }); onProgress?.(ids.length, ids.length); },
     saveImpact: async (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } }),
     // Upsert by id (d.replace: only d.jobs remain). Jobs without `photos` keep their current photos.
@@ -395,6 +397,11 @@ function useSharedStore() {
 
   return {
     status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null,
+    reorderJobs: (ids) => guard(async (db) => {
+      const jobs = (partsRef.current.jobs || []).map((j) => (ids.includes(j.id) ? { ...j, rank: ids.indexOf(j.id) + 1 } : j));
+      for (const j of jobs) if (ids.includes(j.id)) await call(() => db.doc(`jobs/${j.id}`).set(stripPhotos(j)));
+      await stamp(db, jobs);
+    }),
     deleteJobs: (ids, onProgress) => guard(async (db) => {
       onProgress?.(0, ids.length);
       for (const [i, id] of ids.entries()) {

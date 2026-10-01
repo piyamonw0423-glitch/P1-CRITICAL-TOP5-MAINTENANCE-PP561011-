@@ -74,7 +74,7 @@ function cleanJob(id, b) {
   return {
     job: {
       id, plant,
-      wo: str(b.wo, 60), rank: Math.max(1, parseInt(b.rank, 10) || 1),
+      wo: str(b.wo, 60), rank: Math.max(1, parseInt(b.rank, 10) || 1), list: b.list === 'daily' ? 'daily' : 'risk',
       issue: str(b.issue), action: str(b.action), owner: str(b.owner, 120), team: str(b.team, 120),
       start: b.start, end: b.end,
       progress: Math.min(100, Math.max(0, Number(b.progress) || 0)),
@@ -231,6 +231,19 @@ export function createDb(conn) {
       return tx(async (c) => {
         await c.query("DELETE FROM docs WHERE collection = 'photos' AND data->>'jobId' = $1", [id]);
         await del(c, 'jobs', id);
+        await stamp(c, by);
+      });
+    },
+
+    // New order for one ranked list: ids[0] becomes rank 1, ids[1] rank 2, …
+    reorderJobs(ids, by) {
+      if (!Array.isArray(ids) || !ids.length || ids.length > MAX_JOBS_PER_PLANT || !ids.every((id) => typeof id === 'string' && ID_RE.test(id))) {
+        throw bad('invalid job ids');
+      }
+      return tx(async (c) => {
+        for (const [i, id] of ids.entries()) {
+          await c.query("UPDATE docs SET data = jsonb_set(data, '{rank}', to_jsonb($2::int)), updated_at = now() WHERE collection = 'jobs' AND id = $1", [id, i + 1]);
+        }
         await stamp(c, by);
       });
     },

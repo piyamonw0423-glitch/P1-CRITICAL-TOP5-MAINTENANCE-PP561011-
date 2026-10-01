@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { DONE, DOING, MAX_JOBS_PER_PLANT, STUCK } from '../lib/data.js';
 import { GroupSummary } from './Backlog.jsx';
@@ -28,7 +28,7 @@ const clickable = (edit, fn) =>
     ? { role: 'button', tabIndex: 0, onClick: fn, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } } }
     : {};
 
-function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto }) {
+function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto, onMove }) {
   const { job } = row;
   return (
     <div id={`job-${job.id}`} className={`job${edit ? ' is-editable' : ''}${checked ? ' is-selected' : ''}${flash ? ' is-flash' : ''}`} {...clickable(edit, onEdit)}>
@@ -38,7 +38,16 @@ function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto }) {
           <input type="checkbox" checked={checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`เลือกงาน ${job.wo || ''} ${job.issue}`} />
         </label>
       )}
-      <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
+      {edit && onMove ? (
+        // ▲▼ change the job's place in its ranked list (only open jobs are ranked).
+        <span className="job-order" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <button type="button" className="order-btn" disabled={!onMove.up} onClick={onMove.up} aria-label={`เลื่อน ${job.issue} ขึ้น`}>▲</button>
+          <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
+          <button type="button" className="order-btn" disabled={!onMove.down} onClick={onMove.down} aria-label={`เลื่อน ${job.issue} ลง`}>▼</button>
+        </span>
+      ) : (
+        <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
+      )}
       <div className="job-main">
         <div className="job-top">
           <span className="job-issue">{job.issue}</span>
@@ -88,17 +97,32 @@ function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto }) {
   );
 }
 
-export default function PlantCard({ p, edit, flashId, selected, onSelect, onEditJob, onAddJob, onEditImpact, onPhoto, onOpenBacklog }) {
-  // Unfinished Top 5 always shown; finished/other jobs fold behind a chevron (opened for a just-saved job).
+export default function PlantCard({ p, edit, flashId, selected, onSelect, onEditJob, onAddJob, onReorder, onEditImpact, onPhoto, onOpenBacklog }) {
+  // Two ranked lists per plant (machine risk / daily work), one shown at a time.
+  const [tab, setTab] = useState(p.lists[0].k);
+  // Unfinished top 5 always shown; extra and finished jobs fold behind a chevron (opened for a just-saved job).
   const [expanded, setExpanded] = useState(false);
-  const showRest = expanded || p.rest.some((r) => r.job.id === flashId);
+  useEffect(() => {
+    const home = p.lists.find((l) => l.top.concat(l.rest).some((r) => r.job.id === flashId));
+    if (home) setTab(home.k);
+  }, [flashId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const L = p.lists.find((l) => l.k === tab) || p.lists[0];
+  const showRest = expanded || L.rest.some((r) => r.job.id === flashId);
   const restLabel = [
-    p.moreDone && `เสร็จแล้ว ${p.moreDone} งาน`,
-    p.more - p.moreDone && `งานอื่น ${p.more - p.moreDone} งาน`,
+    L.moreOpen && `อันดับ ${L.top.length + 1}+ อีก ${L.moreOpen} งาน`,
+    L.moreDone && `เสร็จแล้ว ${L.moreDone} งาน`,
     p.wo && `WO ค้างใน CMMS ${p.wo.open} งาน`,
   ].filter(Boolean).join(' · ');
-  const ids = p.top.concat(p.rest).map((r) => r.job.id);
+  const ids = p.jobIds;
   const nSel = ids.filter((id) => selected?.has(id)).length;
+  // Swap with the neighbour in the open-job order and save the whole list's new ranks.
+  const move = (id, dir) => {
+    const order = [...L.openIds];
+    const i = order.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return null;
+    return () => { [order[i], order[j]] = [order[j], order[i]]; onReorder(order); };
+  };
   const rowProps = (row) => ({
     row,
     edit,
@@ -106,6 +130,7 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
     checked: !!selected?.has(row.job.id),
     onCheck: (on) => onSelect([row.job.id], on),
     onEdit: () => onEditJob(row.job),
+    onMove: row.job.status !== 'done' ? { up: move(row.job.id, -1), down: move(row.job.id, 1) } : null,
     onPhoto,
   });
   return (
@@ -113,7 +138,7 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
       <div className="plant-head">
         <span className="plant-head-icon"><Icon name="factory" /></span>
         <h3 className="plant-name">{p.name}</h3>
-        <span className="plant-total">Top 5 · {p.total} งาน</span>
+        <span className="plant-total">BD {p.lists[0].total} · ประจำวัน {p.lists[1].total}</span>
       </div>
 
       <div className="plant-stats">
@@ -130,8 +155,23 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
         {p.impact.map((line, i) => <div key={i} className="impact-line">• {line}</div>)}
       </div>
 
+      <div className="list-tabs" role="tablist" aria-label={`รายการงานของ${p.name}`}>
+        {p.lists.map((l) => (
+          <button
+            key={l.k}
+            type="button"
+            role="tab"
+            aria-selected={l.k === L.k}
+            className={`list-tab${l.k === L.k ? ' is-on' : ''}`}
+            onClick={() => { setTab(l.k); setExpanded(false); }}
+          >
+            {l.tab}<span className="list-tab-n">{l.total}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="top5-bar">
-        <span>Top 5 P1 · {p.name}</span>
+        <span>Top 5 {L.label}</span>
         {edit && ids.length > 0 && (
           <label className="sel-all">
             <input
@@ -146,22 +186,22 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
         {edit && (
           p.total >= MAX_JOBS_PER_PLANT
             ? <span className="add-btn is-full" title={`แต่ละโรงมีได้ไม่เกิน ${MAX_JOBS_PER_PLANT} งาน ลบหรือแก้งานเดิมแทน`}>ครบ {MAX_JOBS_PER_PLANT} งาน</span>
-            : <button type="button" className="add-btn" onClick={onAddJob}><span className="ico"><Icon name="plus" /></span>เพิ่มงาน</button>
+            : <button type="button" className="add-btn" onClick={() => onAddJob(L.k)}><span className="ico"><Icon name="plus" /></span>เพิ่มงาน</button>
         )}
       </div>
 
       <div className="jobs">
-        {p.top.length === 0 && (
+        {L.top.length === 0 && (
           <div className="jobs-empty">
-            {p.total === 0
-              ? <>ยังไม่มีงานใน Top 5{p.wo ? <> · เลือกจาก <button type="button" className="linklike" onClick={() => onOpenBacklog(p.id)}>WO Backlog</button> (กด ☆ ติดตาม ในโหมดแก้ไข)</> : ''}</>
+            {L.total === 0
+              ? <>ยังไม่มีงานใน Top 5 {L.tab}{p.wo ? <> · เลือกจาก <button type="button" className="linklike" onClick={() => onOpenBacklog(p.id)}>WO Backlog</button> (กด ☆ ติดตาม ในโหมดแก้ไข)</> : ''}</>
               : 'ไม่มีงานค้าง 🎉'}
           </div>
         )}
-        {p.top.map((row) => (
+        {L.top.map((row) => (
           <JobRow key={row.job.id} {...rowProps(row)} />
         ))}
-        {(p.more > 0 || p.wo) && (
+        {(L.more > 0 || p.wo) && (
           <>
             <button
               type="button"
@@ -176,7 +216,7 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
             </button>
             {showRest && (
               <div id={`rest-${p.id}`} className="jobs-rest">
-                {p.rest.map((row) => (
+                {L.rest.map((row) => (
                   <JobRow key={row.job.id} {...rowProps(row)} />
                 ))}
                 {p.wo && (
