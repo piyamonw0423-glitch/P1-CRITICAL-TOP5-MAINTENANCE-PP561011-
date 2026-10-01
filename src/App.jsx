@@ -16,6 +16,7 @@ import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
 import { jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
 import { findDuplicates } from './lib/dedupe.js';
 import DuplicatesDialog from './components/Duplicates.jsx';
+import { BulkDeleteDialog, SelectBar } from './components/Selection.jsx';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -55,6 +56,9 @@ export default function App() {
   const [backlogFocus, setBacklogFocus] = useState(null); // { plant, n } to open the WO list on one plant
   const [dedupe, setDedupe] = useState(null); // duplicate groups while the remove-duplicates dialog is open
   const [dedupeProg, setDedupeProg] = useState(null); // { done, total, error? } while deleting duplicates
+  const [selected, setSelected] = useState(() => new Set()); // ticked Top 5 job ids (edit mode)
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkProg, setBulkProg] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -89,6 +93,7 @@ export default function App() {
 
   // Leave edit mode if the platform says this viewer cannot write.
   useEffect(() => { if (canWrite === false) setEditMode(false); }, [canWrite]);
+  useEffect(() => { if (!editMode) setSelected(new Set()); }, [editMode]);
 
   const t = today0();
   const tKey = iso(t);
@@ -98,6 +103,31 @@ export default function App() {
   const trackedWos = useMemo(() => new Set(data.jobs.filter((j) => j.wo).map((j) => normWo(j.wo))), [data.jobs]);
 
   // Run a store write; close dialogs and toast on success, keep the form open on failure.
+  const selectJobs = (ids, on) => setSelected((prev) => {
+    const next = new Set(prev);
+    ids.forEach((id) => (on ? next.add(id) : next.delete(id)));
+    return next;
+  });
+
+  // Deletes many jobs with progress; on failure keeps the dialog open with how far it got and why.
+  // Retrying is safe: deleting a job that is already gone is a no-op on every backend.
+  const removeMany = async (ids, setProg, okText) => {
+    setBusy(true);
+    setProg({ done: 0, total: ids.length });
+    try {
+      await store.deleteJobs(ids, (done, total) => setProg({ done, total }));
+      setProg(null);
+      setToast({ text: okText });
+      return true;
+    } catch (e) {
+      setProg((p) => ({ ...(p || { done: 0, total: ids.length }), error: errorText(e) }));
+      if (e?.code === 'wrong_key') setAskKey(true);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const run = async (fn, okText) => {
     setBusy(true);
     try {
@@ -239,6 +269,8 @@ export default function App() {
 
   const scopeLabel = view.ids.length === 4 ? 'ทั้ง 4 โรง' : ` · ${view.filter.label}`;
   const ready = status === 'ready';
+  // Ticked jobs that still exist (another user may have deleted some meanwhile).
+  const selectedJobs = data.jobs.filter((j) => selected.has(j.id));
   const empty = ready && data.jobs.length === 0;
 
   return (
@@ -306,6 +338,8 @@ export default function App() {
                         p={p}
                         edit={editMode}
                         flashId={flashId}
+                        selected={selected}
+                        onSelect={selectJobs}
                         onEditJob={(job) => setModal({ type: 'job', job })}
                         onAddJob={() => openNew(p.id)}
                         onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
@@ -336,6 +370,10 @@ export default function App() {
           </>
         )}
       </main>
+
+      {editMode && selectedJobs.length > 0 && !bulkOpen && (
+        <SelectBar count={selectedJobs.length} onClear={() => setSelected(new Set())} onDelete={() => setBulkOpen(true)} />
+      )}
 
       <footer className="app-footer">
         <span className="app-footer-quote">“ซ่อมให้ทัน ลดความเสี่ยง รักษาความพร้อมของโรงไฟฟ้า”</span>
@@ -390,20 +428,19 @@ export default function App() {
           onCancel={() => { if (!busy) { setDedupe(null); setDedupeProg(null); } }}
           onConfirm={async () => {
             const ids = dedupe.flatMap((g) => g.remove.map((j) => j.id));
-            setBusy(true);
-            setDedupeProg({ done: 0, total: ids.length });
-            try {
-              await store.deleteJobs(ids, (done, total) => setDedupeProg({ done, total }));
-              setDedupe(null);
-              setDedupeProg(null);
-              setToast({ text: `ลบงานซ้ำแล้ว ${ids.length} งาน` });
-            } catch (e) {
-              // Keep the dialog open with how far it got and why it stopped; pressing again resumes on what is left.
-              setDedupeProg((p) => ({ ...(p || { done: 0, total: ids.length }), error: errorText(e) }));
-              if (e?.code === 'wrong_key') setAskKey(true);
-            } finally {
-              setBusy(false);
-            }
+            if (await removeMany(ids, setDedupeProg, `ลบงานซ้ำแล้ว ${ids.length} งาน`)) setDedupe(null);
+          }}
+        />
+      )}
+      {bulkOpen && (
+        <BulkDeleteDialog
+          jobs={selectedJobs}
+          busy={busy}
+          progress={bulkProg}
+          onCancel={() => { if (!busy) { setBulkOpen(false); setBulkProg(null); } }}
+          onConfirm={async () => {
+            const ids = selectedJobs.map((j) => j.id);
+            if (await removeMany(ids, setBulkProg, `ลบแล้ว ${ids.length} งาน`)) { setBulkOpen(false); setSelected(new Set()); }
           }}
         />
       )}

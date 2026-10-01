@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 const pctOf = (p) => (p?.total ? Math.round((p.done / p.total) * 100) : 0);
 
-function DeleteProgress({ done, total, error }) {
+export function DeleteProgress({ done, total, error }) {
   const pct = pctOf({ done, total });
   return (
     <div className={`del-progress${error ? ' is-error' : ''}`} role="status" aria-live="polite">

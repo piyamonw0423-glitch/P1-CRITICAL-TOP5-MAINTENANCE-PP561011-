@@ -28,10 +28,16 @@ const clickable = (edit, fn) =>
     ? { role: 'button', tabIndex: 0, onClick: fn, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } } }
     : {};
 
-function JobRow({ row, edit, flash, onEdit, onPhoto }) {
+function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto }) {
   const { job } = row;
   return (
-    <div id={`job-${job.id}`} className={`job${edit ? ' is-editable' : ''}${flash ? ' is-flash' : ''}`} {...clickable(edit, onEdit)}>
+    <div id={`job-${job.id}`} className={`job${edit ? ' is-editable' : ''}${checked ? ' is-selected' : ''}${flash ? ' is-flash' : ''}`} {...clickable(edit, onEdit)}>
+      {edit && (
+        // Tick to select for bulk delete; clicks here must not open the edit form.
+        <label className="job-check" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`เลือกงาน ${job.wo || ''} ${job.issue}`} />
+        </label>
+      )}
       <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
       <div className="job-main">
         <div className="job-top">
@@ -82,7 +88,7 @@ function JobRow({ row, edit, flash, onEdit, onPhoto }) {
   );
 }
 
-export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEditImpact, onPhoto, onOpenBacklog }) {
+export default function PlantCard({ p, edit, flashId, selected, onSelect, onEditJob, onAddJob, onEditImpact, onPhoto, onOpenBacklog }) {
   // Unfinished Top 5 always shown; finished/other jobs fold behind a chevron (opened for a just-saved job).
   const [expanded, setExpanded] = useState(false);
   const showRest = expanded || p.rest.some((r) => r.job.id === flashId);
@@ -91,6 +97,17 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
     p.more - p.moreDone && `งานอื่น ${p.more - p.moreDone} งาน`,
     p.wo && `WO ค้างใน CMMS ${p.wo.open} งาน`,
   ].filter(Boolean).join(' · ');
+  const ids = p.top.concat(p.rest).map((r) => r.job.id);
+  const nSel = ids.filter((id) => selected?.has(id)).length;
+  const rowProps = (row) => ({
+    row,
+    edit,
+    flash: row.job.id === flashId,
+    checked: !!selected?.has(row.job.id),
+    onCheck: (on) => onSelect([row.job.id], on),
+    onEdit: () => onEditJob(row.job),
+    onPhoto,
+  });
   return (
     <article className="plant" style={{ '--pc': p.color, '--pt': p.tint, '--pd': p.dark }}>
       <div className="plant-head">
@@ -115,6 +132,17 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
 
       <div className="top5-bar">
         <span>Top 5 P1 · {p.name}</span>
+        {edit && ids.length > 0 && (
+          <label className="sel-all">
+            <input
+              type="checkbox"
+              checked={nSel === ids.length}
+              ref={(el) => { if (el) el.indeterminate = nSel > 0 && nSel < ids.length; }}
+              onChange={(e) => onSelect(ids, e.target.checked)}
+            />
+            เลือกทั้งโรง{nSel ? ` (${nSel})` : ''}
+          </label>
+        )}
         {edit && (
           p.total >= MAX_JOBS_PER_PLANT
             ? <span className="add-btn is-full" title={`แต่ละโรงมีได้ไม่เกิน ${MAX_JOBS_PER_PLANT} งาน ลบหรือแก้งานเดิมแทน`}>ครบ {MAX_JOBS_PER_PLANT} งาน</span>
@@ -125,7 +153,7 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
       <div className="jobs">
         {p.top.length === 0 && <div className="jobs-empty">ไม่มีงานค้าง 🎉</div>}
         {p.top.map((row) => (
-          <JobRow key={row.job.id} row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
+          <JobRow key={row.job.id} {...rowProps(row)} />
         ))}
         {(p.more > 0 || p.wo) && (
           <>
@@ -143,7 +171,7 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
             {showRest && (
               <div id={`rest-${p.id}`} className="jobs-rest">
                 {p.rest.map((row) => (
-                  <JobRow key={row.job.id} row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
+                  <JobRow key={row.job.id} {...rowProps(row)} />
                 ))}
                 {p.wo && (
                   <div className="plant-wo">
