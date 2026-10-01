@@ -54,6 +54,7 @@ export default function App() {
   const [backlogUp, setBacklogUp] = useState(null); // { fileName, parsed } while previewing a CMMS upload
   const [backlogFocus, setBacklogFocus] = useState(null); // { plant, n } to open the WO list on one plant
   const [dedupe, setDedupe] = useState(null); // duplicate groups while the remove-duplicates dialog is open
+  const [dedupeProg, setDedupeProg] = useState(null); // { done, total, error? } while deleting duplicates
   const [flashId, setFlashId] = useState(null);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -385,11 +386,24 @@ export default function App() {
         <DuplicatesDialog
           groups={dedupe}
           busy={busy}
-          onCancel={() => setDedupe(null)}
+          progress={dedupeProg}
+          onCancel={() => { if (!busy) { setDedupe(null); setDedupeProg(null); } }}
           onConfirm={async () => {
             const ids = dedupe.flatMap((g) => g.remove.map((j) => j.id));
-            await run(() => store.deleteJobs(ids), `ลบงานซ้ำแล้ว ${ids.length} งาน`);
-            setDedupe(null);
+            setBusy(true);
+            setDedupeProg({ done: 0, total: ids.length });
+            try {
+              await store.deleteJobs(ids, (done, total) => setDedupeProg({ done, total }));
+              setDedupe(null);
+              setDedupeProg(null);
+              setToast({ text: `ลบงานซ้ำแล้ว ${ids.length} งาน` });
+            } catch (e) {
+              // Keep the dialog open with how far it got and why it stopped; pressing again resumes on what is left.
+              setDedupeProg((p) => ({ ...(p || { done: 0, total: ids.length }), error: errorText(e) }));
+              if (e?.code === 'wrong_key') setAskKey(true);
+            } finally {
+              setBusy(false);
+            }
           }}
         />
       )}

@@ -62,6 +62,7 @@ export async function handleApi(db, { method, path, body, perm }) {
       if (method === 'POST' && path === '/api/check-key') return perm.keyOk ? ok() : fail(401, 'wrong_key');
       if (!perm.keyOk) return fail(401, 'wrong_key');
       const by = perm.email || null;
+      if (method === 'POST' && path === '/api/jobs/delete') { await db.deleteJobs(body?.ids, by); return ok(); }
       if (method === 'PUT' && m?.[1] === 'jobs') { await db.saveJob(id, body, by); return ok(); }
       if (method === 'DELETE' && m?.[1] === 'jobs') { await db.deleteJob(id, by); return ok(); }
       if (method === 'PUT' && m?.[1] === 'plants') { await db.saveImpact(id, body?.impact, by); return ok(); }

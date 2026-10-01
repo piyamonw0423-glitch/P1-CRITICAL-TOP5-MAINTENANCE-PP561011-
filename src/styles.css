@@ -79,20 +79,32 @@ a { color: oklch(0.5 0.17 255); }
 
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 600px), 1fr)); gap: 16px; }
 .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.kpi { border-radius: 20px; background: white; border: 2px solid var(--k); overflow: hidden; display: flex; flex-direction: column; }
+.kpi { border-radius: 20px; background: white; border: 2px solid var(--k); overflow: hidden; display: flex; flex-direction: column; min-width: 0; container-type: inline-size; }
 .kpi-done { --k: var(--done); --kh: white; --ki: var(--done-ink); }
 .kpi-doing { --k: var(--doing); --kh: var(--gold-ink); --ki: var(--doing-ink); }
 .kpi-stuck { --k: var(--stuck); --kh: white; --ki: var(--stuck-ink); }
-.kpi-head { background: var(--k); color: var(--kh); padding: 8px 14px; display: flex; align-items: center; gap: 8px; font-family: var(--font-head); font-size: 16px; font-weight: 500; line-height: 1.4; }
-.kpi-head .ico { font-size: 18px; }
-.kpi-body { padding: 6px 14px 12px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; color: var(--ki); }
-.kpi-value { font-family: var(--font-head); font-weight: 700; font-size: 44px; line-height: 1.15; }
-.kpi-pct { font-size: 18px; font-weight: 700; }
-.kpi-total { background: var(--navy); color: white; border: 0; padding: 14px 16px; gap: 4px; }
-.kpi-total .kpi-head { background: none; color: white; padding: 0; }
-.kpi-total .kpi-head .ico { font-size: 20px; color: var(--gold); }
-.kpi-total .kpi-value { font-size: 48px; line-height: 1.1; }
-.kpi-foot { font-size: 14px; color: var(--on-navy-muted); }
+.kpi-head { background: var(--k); color: var(--kh); padding: 10px clamp(10px, 7cqi, 16px); display: flex; align-items: center; gap: 10px; font-family: var(--font-head); font-size: clamp(13.5px, 8.2cqi, 19px); font-weight: 600; line-height: 1.3; min-height: 46px; }
+.kpi-head .ico { font-size: 1.2em; flex-shrink: 0; }
+.kpi-label { min-width: 0; }
+.kpi-body { flex: 1; padding: 10px clamp(10px, 7cqi, 16px) 14px; display: flex; flex-direction: column; justify-content: center; gap: 8px; color: var(--ki); }
+.kpi-nums { display: flex; align-items: baseline; gap: 0 6px; flex-wrap: wrap; }
+.kpi-value { font-family: var(--font-head); font-weight: 700; font-size: clamp(34px, 25cqi, 60px); line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi-pct { font-size: clamp(14px, 9cqi, 22px); font-weight: 700; }
+.kpi-unit { font-size: clamp(14px, 9cqi, 20px); font-weight: 600; color: var(--on-navy-muted); }
+.kpi-meter { height: 8px; border-radius: 99px; background: color-mix(in oklch, var(--k) 18%, white); overflow: hidden; }
+.kpi-meter i { display: block; height: 100%; border-radius: inherit; background: var(--k); }
+.kpi-of { font-size: clamp(12px, 7.5cqi, 14px); font-weight: 600; color: var(--ink-2); }
+.kpi-total { background: var(--navy); color: white; border: 0; }
+.kpi-total .kpi-head { background: none; color: white; padding-bottom: 0; }
+.kpi-total .kpi-head .ico { color: var(--gold); }
+.kpi-total .kpi-body { color: white; }
+.kpi-foot { font-size: clamp(12px, 7.5cqi, 14px); color: var(--on-navy-muted); line-height: 1.4; }
+.del-progress { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; background: oklch(0.97 0.01 250); }
+.del-progress-text { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.del-progress-text b { color: var(--ink); }
+.del-progress-bar { height: 10px; border-radius: 99px; background: oklch(0.9 0.02 250); overflow: hidden; }
+.del-progress-bar i { display: block; height: 100%; background: var(--done); border-radius: inherit; transition: width .3s ease; }
+.del-progress.is-error .del-progress-bar i { background: var(--stuck); }
 
 .highlights { border-radius: 20px; background: var(--navy); color: white; padding: 14px 20px; display: flex; flex-direction: column; gap: 8px; }
 .highlights-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--font-head); font-size: 17px; font-weight: 600; line-height: 1.4; }
@@ -301,7 +313,7 @@ a { color: oklch(0.5 0.17 255); }
 .jobs-toggle.is-open .jobs-toggle-chev { transform: rotate(180deg); }
 .jobs-toggle-hint { margin-left: auto; font-weight: 600; color: var(--muted); }
 .jobs-rest { opacity: 0.85; }
-@media (prefers-reduced-motion: reduce) { .jobs-toggle-chev { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .jobs-toggle-chev, .del-progress-bar i { transition: none; } }
 
 /* ---------- CMMS WO Backlog ---------- */
 .cmms-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: color-mix(in oklch, var(--g) 16%, white); color: color-mix(in oklch, var(--g) 70%, black); white-space: nowrap; }

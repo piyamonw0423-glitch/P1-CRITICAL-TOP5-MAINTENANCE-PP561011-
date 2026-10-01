@@ -1,7 +1,23 @@
 import { useEffect } from 'react';
 
+const pctOf = (p) => (p?.total ? Math.round((p.done / p.total) * 100) : 0);
+
+function DeleteProgress({ done, total, error }) {
+  const pct = pctOf({ done, total });
+  return (
+    <div className={`del-progress${error ? ' is-error' : ''}`} role="status" aria-live="polite">
+      <div className="del-progress-text">
+        <span>{error ? `หยุดที่ ${done}/${total} งาน` : done >= total ? 'ลบครบแล้ว กำลังโหลดข้อมูลใหม่…' : `กำลังลบ ${done}/${total} งาน`}</span>
+        <b>{pct}%</b>
+      </div>
+      <div className="del-progress-bar"><i style={{ width: `${pct}%` }} /></div>
+      {error && <div className="field-error">สาเหตุ: {error}</div>}
+    </div>
+  );
+}
+
 // Preview of duplicate Top 5 jobs: which one stays and which are removed, before deleting.
-export default function DuplicatesDialog({ groups, busy, onConfirm, onCancel }) {
+export default function DuplicatesDialog({ groups, busy, progress, onConfirm, onCancel }) {
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onCancel(); };
     window.addEventListener('keydown', h);
@@ -30,12 +46,17 @@ export default function DuplicatesDialog({ groups, busy, onConfirm, onCancel }) 
               </ul>
             </>
           )}
+          {progress && <DeleteProgress {...progress} />}
         </div>
         <div className="modal-foot">
           <div />
           <div className="modal-foot-right">
             <button type="button" className="btn btn-ghost" onClick={onCancel}>{groups.length ? 'ยกเลิก' : 'ปิด'}</button>
-            {groups.length > 0 && <button type="button" className="btn btn-danger-solid" disabled={busy} onClick={onConfirm}>{busy ? 'กำลังลบ…' : `ลบ ${removeCount} งานซ้ำ`}</button>}
+            {groups.length > 0 && (
+              <button type="button" className="btn btn-danger-solid" disabled={busy} onClick={onConfirm}>
+                {busy ? `กำลังลบ… ${pctOf(progress)}%` : progress?.error ? 'ลองอีกครั้ง' : `ลบ ${removeCount} งานซ้ำ`}
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -188,11 +188,16 @@ function useApiStore() {
     unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
     deleteJob: (id) => send('DELETE', `api/jobs/${encodeURIComponent(id)}`),
-    deleteJobs: async (ids) => {
-      for (const id of ids) {
-        const r = await request('DELETE', `api/jobs/${encodeURIComponent(id)}`);
+    // Bulk delete in chunks (one transaction each) so large clean-ups can report progress.
+    deleteJobs: async (ids, onProgress) => {
+      const CHUNK = 10;
+      onProgress?.(0, ids.length);
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const part = ids.slice(i, i + CHUNK);
+        const r = await request('POST', 'api/jobs/delete', { ids: part });
         if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
-        if (!r.ok) throw new StoreError(r.status === 403 ? 'read_only' : 'unavailable');
+        if (!r.ok) throw new StoreError(r.status === 403 ? 'read_only' : 'unavailable', null, `HTTP ${r.status}`);
+        onProgress?.(Math.min(i + CHUNK, ids.length), ids.length);
       }
       await load().catch(() => {});
     },
@@ -233,7 +238,7 @@ function useLocalStore() {
       commit({ ...data, jobs: exists ? data.jobs.map((j) => (j.id === job.id ? job : j)) : data.jobs.concat([job]) });
     },
     deleteJob: async (id) => commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }),
-    deleteJobs: async (ids) => commit({ ...data, jobs: data.jobs.filter((j) => !ids.includes(j.id)) }),
+    deleteJobs: async (ids, onProgress) => { commit({ ...data, jobs: data.jobs.filter((j) => !ids.includes(j.id)) }); onProgress?.(ids.length, ids.length); },
     saveImpact: async (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } }),
     // Upsert by id (d.replace: only d.jobs remain). Jobs without `photos` keep their current photos.
     importData: async (d) => {
@@ -390,10 +395,12 @@ function useSharedStore() {
 
   return {
     status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null,
-    deleteJobs: (ids) => guard(async (db) => {
-      for (const id of ids) {
+    deleteJobs: (ids, onProgress) => guard(async (db) => {
+      onProgress?.(0, ids.length);
+      for (const [i, id] of ids.entries()) {
         for (const ph of partsRef.current.photos.filter((p) => p.jobId === id)) await call(() => db.doc(`photos/${ph.id}`).delete());
         await call(() => db.doc(`jobs/${id}`).delete());
+        onProgress?.(i + 1, ids.length);
       }
       await stamp(db, (partsRef.current.jobs || []).filter((j) => !ids.includes(j.id)));
     }),

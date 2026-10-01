@@ -235,6 +235,18 @@ export function createDb(conn) {
       });
     },
 
+    // Several jobs in one transaction (the "ลบงานซ้ำ" button), so the trend is restamped once.
+    deleteJobs(ids, by) {
+      if (!Array.isArray(ids) || !ids.length || ids.length > 200 || !ids.every((id) => typeof id === 'string' && ID_RE.test(id))) {
+        throw bad('invalid job ids');
+      }
+      return tx(async (c) => {
+        await c.query("DELETE FROM docs WHERE collection = 'photos' AND data->>'jobId' = ANY($1::text[])", [ids]);
+        await c.query("DELETE FROM docs WHERE collection = 'jobs' AND id = ANY($1::text[])", [ids]);
+        await stamp(c, by);
+      });
+    },
+
     async backlog() {
       const r = await conn.query("SELECT data FROM docs WHERE collection = 'backlog' AND id = 'current'");
       return r.rows[0]?.data || null;
