@@ -14,12 +14,20 @@ const safeEqual = (a, b) => {
   return diff === 0;
 };
 
+// Passwords are compared trimmed and NFC-normalised: browsers strip spaces around header values and a
+// secret pasted into the Cloudflare dashboard often carries a trailing newline.
+const normKey = (s) => String(s ?? '').normalize('NFC').trim();
+// The browser sends the key URI-encoded so non-Latin (e.g. Thai) passwords survive the HTTP header.
+const decodeKey = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+
 /** Who is calling and what they may do, from the verified email and the environment. */
 export function permissions(env, email, editKey) {
   const editors = String(env.EDITOR_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   const byEmail = editors.length ? !!email && editors.includes(email.toLowerCase()) : true;
-  const needsKey = !!env.EDIT_PASSWORD;
-  const keyOk = !needsKey || (!!editKey && safeEqual(editKey, env.EDIT_PASSWORD));
+  const secret = normKey(env.EDIT_PASSWORD);
+  const given = normKey(decodeKey(editKey || ''));
+  const needsKey = !!secret;
+  const keyOk = !needsKey || (!!given && safeEqual(given, secret));
   // Secure default: with no team password and no Access editor list, nobody may change data.
   const unprotected = !needsKey && !editors.length && String(env.ALLOW_OPEN_EDIT) !== 'true';
   return { email: email || null, canWrite: byEmail && !unprotected, needsKey, keyOk, setup: unprotected ? 'no_password' : null };

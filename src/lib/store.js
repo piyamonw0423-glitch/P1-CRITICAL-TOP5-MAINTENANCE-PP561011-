@@ -143,7 +143,8 @@ function useApiStore() {
   const request = async (method, url, body, key = editKey) => {
     const headers = {};
     if (body) headers['Content-Type'] = 'application/json';
-    if (key) headers['X-Edit-Key'] = key;
+    // URI-encoded so Thai or other non-Latin passwords can travel in a header; the server decodes and trims.
+    if (key) headers['X-Edit-Key'] = encodeURIComponent(key.normalize('NFC').trim());
     try {
       return await fetchT(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     } catch {
