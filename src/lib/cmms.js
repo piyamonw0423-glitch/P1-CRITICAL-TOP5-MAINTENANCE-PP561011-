@@ -18,6 +18,9 @@ export const STATUS_GROUPS = [
 ];
 const GROUP_BY_CODE = Object.fromEntries(STATUS_GROUPS.flatMap((g) => g.codes.map((c) => [c, g])));
 export const groupOf = (status) => GROUP_BY_CODE[String(status || '').trim().toUpperCase()] || STATUS_GROUPS.at(-1);
+/** Headline KPI bucket for a status group: done (finished/closed), doing (in progress/rework), stuck (everything waiting). */
+export const kpiBucket = (key) => (isClosedGroup(key) ? 'done' : key === 'inprg' || key === 'rework' ? 'doing' : 'stuck');
+
 /** Finished or closed in the CMMS: no longer backlog. */
 export const isClosedGroup = (key) => key === 'finish' || key === 'closed';
 

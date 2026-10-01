@@ -96,7 +96,7 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
       <div className="plant-head">
         <span className="plant-head-icon"><Icon name="factory" /></span>
         <h3 className="plant-name">{p.name}</h3>
-        <span className="plant-total">P1 ทั้งหมด {p.total} งาน</span>
+        <span className="plant-total">Top 5 · {p.total} งาน</span>
       </div>
 
       <div className="plant-stats">

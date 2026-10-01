@@ -5,7 +5,7 @@ import { pd, thD } from '../lib/dates.js';
 export function BlockerSummary({ items, scopeLabel }) {
   return (
     <div className="panel">
-      <div className="panel-head">ปัญหาหน้างานที่ติดอยู่ (Blocker) · งานที่ยังไม่เสร็จ{scopeLabel}</div>
+      <div className="panel-head">ปัญหาหน้างานที่ติดอยู่ (Blocker) · งาน Top 5 ที่ยังไม่เสร็จ{scopeLabel}</div>
       <div className="blockers">
         {items.length === 0 && <div className="muted">ไม่มีงานที่ติดปัญหา</div>}
         {items.map((b) => (
@@ -57,7 +57,7 @@ export function TrendPanel({ hist }) {
   return (
     <div className="panel">
       <div className="panel-head panel-head-split">
-        <span>แนวโน้มงาน P1 (บันทึกทุกครั้งที่อัปเดต)</span>
+        <span>แนวโน้มงาน Top 5 (บันทึกทุกครั้งที่อัปเดต)</span>
         <span className="trend-legend">
           <span><i style={{ background: DONE }} />เสร็จแล้ว</span>
           <span><i style={{ background: DOING }} />กำลังทำ</span>

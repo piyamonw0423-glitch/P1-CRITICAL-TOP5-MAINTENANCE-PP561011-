@@ -35,16 +35,17 @@ function KpiCard({ tone, icon, label, value, pct }) {
 }
 
 export function KpiRow({ kpi }) {
+  const cmms = kpi.source === 'cmms';
   return (
     <div className="kpi-row">
       <div className="kpi kpi-total">
-        <div className="kpi-head"><span className="ico"><Icon name="alert" /></span>P1 ทั้งหมด</div>
+        <div className="kpi-head"><span className="ico"><Icon name="alert" /></span>{cmms ? 'WO P1 ทั้งหมด' : 'P1 ทั้งหมด'}</div>
         <div className="kpi-value">{kpi.total}</div>
-        <div className="kpi-foot">งาน · {kpi.plants} โรง</div>
+        <div className="kpi-foot">{cmms ? `WO ใน CMMS · ${kpi.plants} โรง · Top 5 ติดตาม ${kpi.top5} งาน` : `งาน · ${kpi.plants} โรง`}</div>
       </div>
-      <KpiCard tone="done" icon="check" label="เสร็จแล้ว" value={kpi.done} pct={kpi.donePct} />
+      <KpiCard tone="done" icon="check" label={cmms ? 'เสร็จ / ปิดแล้ว' : 'เสร็จแล้ว'} value={kpi.done} pct={kpi.donePct} />
       <KpiCard tone="doing" icon="clock" label="กำลังดำเนินการ" value={kpi.doing} pct={kpi.doingPct} />
-      <KpiCard tone="stuck" icon="alert" label="ค้าง / เกินกำหนด" value={kpi.stuck} pct={kpi.stuckPct} />
+      <KpiCard tone="stuck" icon="alert" label={cmms ? 'รอดำเนินการ / ค้าง' : 'ค้าง / เกินกำหนด'} value={kpi.stuck} pct={kpi.stuckPct} />
     </div>
   );
 }

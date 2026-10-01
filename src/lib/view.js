@@ -1,6 +1,6 @@
 import { BLOCK, DONE, DOING, FILTERS, GROUPS, PLANT_IDS, PLANT_META, STATUS, STUCK, bucket, counts } from './data.js';
 import { daysBetween, iso, pd, range, thD } from './dates.js';
-import { groupOf, isClosedGroup, normWo, summarize } from './cmms.js';
+import { groupOf, isClosedGroup, kpiBucket, normWo, summarize } from './cmms.js';
 
 const pctOf = (n, total) => Math.round((n / (total || 1)) * 100);
 
@@ -96,8 +96,20 @@ export function dashboardView(data, filterKey, t, backlog = null) {
     .map((id) => ({ id, n: counts(data.jobs.filter((j) => j.plant === id), t).stuck }))
     .sort((a, b) => b.n - a.n);
   const overdue = open.filter((j) => pd(j.end) < t).sort((a, b) => pd(a.end) - pd(b.end));
+  // Headline numbers: every P1 work order in the CMMS snapshot when there is one, else the Top 5 jobs.
+  const woRows = backlog ? backlog.rows.filter((r) => ids.includes(r.plant)) : null;
+  let kpi;
+  if (woRows) {
+    const k = { done: 0, doing: 0, stuck: 0 };
+    woRows.forEach((r) => { k[kpiBucket(groupOf(r.status).key)]++; });
+    const wp = (n) => pctOf(n, woRows.length);
+    kpi = { source: 'cmms', total: woRows.length, plants: ids.length, top5: jobs.length, ...k, donePct: wp(k.done), doingPct: wp(k.doing), stuckPct: wp(k.stuck) };
+  } else {
+    kpi = { source: 'top5', total: jobs.length, plants: ids.length, ...c, donePct: pc(c.done), doingPct: pc(c.doing), stuckPct: pc(c.stuck) };
+  }
   const highlights = [
-    { k: `P1 ทั้งหมด ${jobs.length} งาน`, v: `· เสร็จ ${c.done} (${pc(c.done)}%) · กำลังทำ ${c.doing} (${pc(c.doing)}%) · ค้าง ${c.stuck} (${pc(c.stuck)}%)` },
+    ...(woRows ? [{ k: `WO P1 ใน CMMS ${kpi.total} WO`, v: `· เสร็จ/ปิด ${kpi.done} (${kpi.donePct}%) · กำลังดำเนินการ ${kpi.doing} (${kpi.doingPct}%) · รอ/ค้าง ${kpi.stuck} (${kpi.stuckPct}%)` }] : []),
+    { k: `Top 5 ติดตาม ${jobs.length} งาน`, v: `· เสร็จ ${c.done} (${pc(c.done)}%) · กำลังทำ ${c.doing} (${pc(c.doing)}%) · ค้าง ${c.stuck} (${pc(c.stuck)}%)` },
     { k: 'โรงที่เสี่ยงสุด:', v: risk.filter((r) => r.n > 0).slice(0, 2).map((r) => `โรง ${r.id} (ค้าง ${r.n} งาน)`).join(' และ ') || 'ไม่มีงานค้าง' },
     { k: 'ติดปัญหาหลัก:', v: blockers.slice(0, 3).map((b) => `${b.label} ${b.count} งาน`).join(' · ') || 'ไม่มี' },
     {
@@ -131,7 +143,7 @@ export function dashboardView(data, filterKey, t, backlog = null) {
     filter: f,
     ids,
     color: ids.length === 1 ? PLANT_META[ids[0]].color : 'oklch(0.27 0.07 258)',
-    kpi: { total: jobs.length, plants: ids.length, ...c, donePct: pc(c.done), doingPct: pc(c.doing), stuckPct: pc(c.stuck) },
+    kpi,
     highlights,
     groups,
     blockers,
