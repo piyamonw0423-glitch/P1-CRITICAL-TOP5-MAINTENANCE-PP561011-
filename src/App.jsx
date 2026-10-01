@@ -271,7 +271,8 @@ export default function App() {
   const ready = status === 'ready';
   // Ticked jobs that still exist (another user may have deleted some meanwhile).
   const selectedJobs = data.jobs.filter((j) => selected.has(j.id));
-  const empty = ready && data.jobs.length === 0;
+  // The start screen only when there is nothing at all; with a CMMS backlog the dashboard stays (Top 5 can be empty).
+  const empty = ready && data.jobs.length === 0 && !store.backlog?.rows?.length && !data.backlogAt;
 
   return (
     <div className="app">

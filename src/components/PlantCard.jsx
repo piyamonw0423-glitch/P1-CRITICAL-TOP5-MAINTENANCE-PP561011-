@@ -151,7 +151,13 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
       </div>
 
       <div className="jobs">
-        {p.top.length === 0 && <div className="jobs-empty">ไม่มีงานค้าง 🎉</div>}
+        {p.top.length === 0 && (
+          <div className="jobs-empty">
+            {p.total === 0
+              ? <>ยังไม่มีงานใน Top 5{p.wo ? <> · เลือกจาก <button type="button" className="linklike" onClick={() => onOpenBacklog(p.id)}>WO Backlog</button> (กด ☆ ติดตาม ในโหมดแก้ไข)</> : ''}</>
+              : 'ไม่มีงานค้าง 🎉'}
+          </div>
+        )}
         {p.top.map((row) => (
           <JobRow key={row.job.id} {...rowProps(row)} />
         ))}
