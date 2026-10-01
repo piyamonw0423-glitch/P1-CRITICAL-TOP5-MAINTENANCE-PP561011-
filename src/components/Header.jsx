@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import Icon from '../lib/icons.jsx';
 import { hhmm, thD } from '../lib/dates.js';
 
-export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly, onToggleEdit }) {
+export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly, readOnlyText, onToggleEdit }) {
   const up = updatedAt ? new Date(updatedAt) : null;
   return (
     <header className="app-header">
@@ -29,14 +29,15 @@ export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly,
             {editMode ? 'เสร็จสิ้นการแก้ไข' : 'อัปเดตงานประจำวัน'}
           </button>
         )}
-        {readOnly && <span className="readonly-chip">ดูอย่างเดียว</span>}
+        {readOnly && <span className="readonly-chip">{readOnlyText || 'ดูอย่างเดียว'}</span>}
       </div>
     </header>
   );
 }
 
-export function EditBar({ shared, onExportExcel, onExport, onImportFile, onReset }) {
+export function EditBar({ shared, onExportExcel, onExport, onImportFile, onUploadBacklog, onReset }) {
   const fileRef = useRef(null);
+  const backlogRef = useRef(null);
   return (
     <div className="edit-bar">
       <span>
@@ -46,6 +47,15 @@ export function EditBar({ shared, onExportExcel, onExport, onImportFile, onReset
       <div className="edit-bar-actions">
         <button type="button" className="pill-btn" onClick={onExportExcel} title="ใช้เป็นแม่แบบกรอกข้อมูลได้"><span className="ico"><Icon name="download" /></span>ส่งออก Excel</button>
         <button type="button" className="pill-btn" onClick={() => fileRef.current?.click()} title="ไฟล์ Excel (.xlsx) หรือไฟล์สำรอง (.json)"><span className="ico"><Icon name="upload" /></span>นำเข้า Excel</button>
+        <button type="button" className="pill-btn is-cmms" onClick={() => backlogRef.current?.click()} title="ไฟล์ List of Work Orders ที่ export จาก CMMS"><span className="ico"><Icon name="upload" /></span>อัปโหลด WO Backlog (CMMS)</button>
+        <input
+          id="backlog-file"
+          ref={backlogRef}
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          hidden
+          onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onUploadBacklog(f); }}
+        />
         <button type="button" className="pill-btn" onClick={onExport} title="รวมรูปหน้างาน ใช้กู้คืนข้อมูลทั้งหมด"><span className="ico"><Icon name="download" /></span>{shared ? 'สำรองข้อมูล (.json)' : 'ส่งออกไฟล์ (แชร์ทีม)'}</button>
         {onReset && <button type="button" className="pill-btn is-danger" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button>}
         <input

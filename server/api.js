@@ -3,6 +3,7 @@
 //   ACCESS_TEAM_DOMAIN + ACCESS_AUD  Cloudflare Access login; the Worker verifies it and passes `email`.
 //   EDITOR_EMAILS                    comma-separated emails allowed to edit (needs Access). Others view only.
 //   EDIT_PASSWORD                    team password required for every change (sent as X-Edit-Key).
+//                                    Not set → the site is view-only, unless ALLOW_OPEN_EDIT=true (local testing).
 
 const enc = new TextEncoder();
 // Compare secrets without leaking their length/prefix through timing.
@@ -19,7 +20,9 @@ export function permissions(env, email, editKey) {
   const byEmail = editors.length ? !!email && editors.includes(email.toLowerCase()) : true;
   const needsKey = !!env.EDIT_PASSWORD;
   const keyOk = !needsKey || (!!editKey && safeEqual(editKey, env.EDIT_PASSWORD));
-  return { email: email || null, canWrite: byEmail, needsKey, keyOk };
+  // Secure default: with no team password and no Access editor list, nobody may change data.
+  const unprotected = !needsKey && !editors.length && String(env.ALLOW_OPEN_EDIT) !== 'true';
+  return { email: email || null, canWrite: byEmail && !unprotected, needsKey, keyOk, setup: unprotected ? 'no_password' : null };
 }
 
 const ok = (json = { ok: true }) => ({ status: 200, json });
@@ -37,7 +40,8 @@ export async function handleApi(db, { method, path, body, perm }) {
 
   try {
     if (method === 'GET' && path === '/api/health') { await db.ping(); return ok(); }
-    if (method === 'GET' && path === '/api/me') return ok({ email: perm.email, canWrite: perm.canWrite, needsKey: perm.needsKey });
+    if (method === 'GET' && path === '/api/me') return ok({ email: perm.email, canWrite: perm.canWrite, needsKey: perm.needsKey, setup: perm.setup });
+    if (method === 'GET' && path === '/api/backlog') return ok(await db.backlog());
     if (method === 'GET' && path === '/api/state') return ok(await db.state());
     if (method === 'GET' && path === '/api/version') return ok(await db.version());
     if (method === 'GET' && m?.[1] === 'photos') {
@@ -46,7 +50,7 @@ export async function handleApi(db, { method, path, body, perm }) {
     }
 
     if (isWrite) {
-      if (!perm.canWrite) return fail(403, 'read_only');
+      if (!perm.canWrite) return fail(403, perm.setup || 'read_only');
       if (method === 'POST' && path === '/api/check-key') return perm.keyOk ? ok() : fail(401, 'wrong_key');
       if (!perm.keyOk) return fail(401, 'wrong_key');
       const by = perm.email || null;
@@ -54,6 +58,7 @@ export async function handleApi(db, { method, path, body, perm }) {
       if (method === 'DELETE' && m?.[1] === 'jobs') { await db.deleteJob(id, by); return ok(); }
       if (method === 'PUT' && m?.[1] === 'plants') { await db.saveImpact(id, body?.impact, by); return ok(); }
       if (method === 'POST' && path === '/api/import') { await db.importData(body, by); return ok(); }
+      if (method === 'PUT' && path === '/api/backlog') { await db.saveBacklog(body, by); return ok(); }
     }
     return fail(404, 'not_found');
   } catch (e) {

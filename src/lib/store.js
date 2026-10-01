@@ -90,7 +90,9 @@ function useApiStore() {
   const [me, setMe] = useState({ email: null, canWrite: null, needsKey: false });
   const [editKey, setEditKey] = useState(readKey);
   const [problem, setProblem] = useState('');
+  const [backlog, setBacklog] = useState(null); // CMMS WO snapshot, fetched only when backlogAt changes
   const versionRef = useRef(null);
+  const backlogAtRef = useRef(undefined);
 
   const load = useCallback(async () => {
     const r = await fetchT('api/state', { cache: 'no-store' });
@@ -99,6 +101,11 @@ function useApiStore() {
     versionRef.current = d.updatedAt;
     setData(d);
     setStatus('ready');
+    if (d.backlogAt !== backlogAtRef.current) {
+      backlogAtRef.current = d.backlogAt;
+      if (!d.backlogAt) setBacklog(null);
+      else fetchT('api/backlog', { cache: 'no-store' }).then((b) => (b.ok ? b.json() : null)).then((b) => b && setBacklog(b)).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -148,7 +155,8 @@ function useApiStore() {
     if (!r.ok) {
       const b = await r.json().catch(() => ({}));
       const code = String(b.error || '').startsWith('plant_full') ? 'plant_full'
-        : { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
+        : b.error === 'no_password' ? 'no_password'
+          : { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
       throw new StoreError(code, b.error, b.detail || b.error || `HTTP ${r.status}`);
     }
     await load().catch(() => {});
@@ -167,9 +175,12 @@ function useApiStore() {
     status,
     shared: true,
     canWrite: me.canWrite,
+    setup: me.setup || null,
     needsKey: me.needsKey && !editKey,
     unlock,
     data,
+    backlog,
+    uploadBacklog: (b) => send('PUT', 'api/backlog', b),
     whoUpdated: data.updatedBy || '',
     unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
@@ -182,8 +193,12 @@ function useApiStore() {
 
 /* ---------------- local (per-browser) ---------------- */
 
+const BACKLOG_KEY = 'p1dash.backlog';
+const readBacklog = () => { try { return JSON.parse(localStorage.getItem(BACKLOG_KEY)); } catch { return null; } };
+
 function useLocalStore() {
   const [data, setData] = useState(loadData);
+  const [backlog, setBacklog] = useState(readBacklog);
   const commit = (next) => {
     const { next: saved, ok } = commitData(next);
     setData(saved);
@@ -194,6 +209,12 @@ function useLocalStore() {
     shared: false,
     canWrite: true,
     data,
+    backlog,
+    uploadBacklog: async ({ fileName, rows }) => {
+      const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
+      try { localStorage.setItem(BACKLOG_KEY, JSON.stringify(doc)); } catch { throw new StoreError('quota_exceeded'); }
+      setBacklog(doc);
+    },
     whoUpdated: '',
     saveJob: async (job) => {
       assertRoom(data.jobs, job);
@@ -256,6 +277,7 @@ function useSharedStore() {
         db.collection('plants').onSnapshot((s) => setParts((p) => ({ ...p, plants: docsToObj(s) })), onErr),
         db.collection('history').onSnapshot((s) => setParts((p) => ({ ...p, history: s.docs.map((d) => d.data()) })), onErr),
         db.doc('meta/app').onSnapshot((s) => setParts((p) => ({ ...p, meta: s.exists ? s.data() : {} })), onErr),
+        db.doc('backlog/current').onSnapshot((s) => setParts((p) => ({ ...p, backlog: s.exists ? s.data() : null })), onErr),
       );
     })();
     return () => { alive = false; unsubs.forEach((u) => u()); };
@@ -356,6 +378,14 @@ function useSharedStore() {
 
   return {
     status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null,
+    backlog: parts.backlog || null,
+    // One document (≤ 256 KiB in the artifact store), replaced on every upload.
+    uploadBacklog: ({ fileName, rows }) => guard(async (db) => {
+      const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
+      if (JSON.stringify(doc).length > 250000) throw new StoreError('quota_exceeded');
+      await call(() => db.doc('backlog/current').set(doc));
+      await stamp(db, partsRef.current.jobs || []);
+    }),
     unavailableText: 'กรุณาเข้าสู่ระบบ claude.ai ด้วยบัญชีที่ได้รับเชิญ แล้วเปิดลิงก์นี้อีกครั้ง หากยังเปิดไม่ได้ ให้ขอสิทธิ์จากเจ้าของแดชบอร์ด',
   };
 }

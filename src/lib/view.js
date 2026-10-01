@@ -1,11 +1,12 @@
 import { BLOCK, DONE, DOING, FILTERS, GROUPS, PLANT_IDS, PLANT_META, STATUS, STUCK, bucket, counts } from './data.js';
 import { daysBetween, iso, pd, range, thD } from './dates.js';
+import { groupOf, isClosedGroup, normWo, summarize } from './cmms.js';
 
 const pctOf = (n, total) => Math.round((n / (total || 1)) * 100);
 
 export const filterFor = (k) => FILTERS.find((x) => x.k === k) || FILTERS[0];
 
-function jobRow(j, i, pid, t) {
+function jobRow(j, i, pid, t, cmmsIdx) {
   const b = bucket(j, t);
   const days = daysBetween(t, pd(j.end));
   const bl = BLOCK[j.blocker] || BLOCK.none;
@@ -14,7 +15,11 @@ function jobRow(j, i, pid, t) {
   const status = overdue ? { label: 'เกินกำหนด', bg: STUCK, fg: 'white' } : st;
   const timeText = j.status === 'done' ? 'ปิดงานแล้ว' : days < 0 ? `เกิน ${-days} วัน` : days === 0 ? 'ครบกำหนดวันนี้' : `เหลือ ${days} วัน`;
   const timeColor = j.status === 'done' ? 'oklch(0.5 0.15 150)' : days <= 0 ? 'oklch(0.55 0.21 25)' : days <= 2 ? 'oklch(0.55 0.13 70)' : 'oklch(0.45 0.04 258)';
+  // Latest CMMS status for this WO, when the backlog snapshot has it.
+  const w = j.wo && cmmsIdx?.get(normWo(j.wo));
+  const cmms = w ? { status: w.status, closed: isClosedGroup(groupOf(w.status).key) } : null;
   return {
+    cmms,
     job: j,
     rank: i + 1,
     rankBg: overdue ? STUCK : PLANT_META[pid].color,
@@ -33,7 +38,9 @@ function jobRow(j, i, pid, t) {
   };
 }
 
-export function plantView(data, pid, t) {
+export function plantView(data, pid, t, backlog = null) {
+  const cmmsIdx = backlog ? new Map(backlog.rows.map((r) => [normWo(r.wo), r])) : null;
+  const woRows = backlog ? backlog.rows.filter((r) => r.plant === pid) : null;
   const all = data.jobs.filter((j) => j.plant === pid);
   const c = counts(all, t);
   // Shown: up to 5 unfinished jobs by rank. Collapsed behind a toggle: finished jobs and any extra open ones.
@@ -49,14 +56,15 @@ export function plantView(data, pid, t) {
     ...c,
     pct: pctOf(c.done, all.length),
     impact: data.plants[pid]?.impact || [],
-    top: top.map((j, i) => jobRow(j, i, pid, t)),
-    rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t)),
+    top: top.map((j, i) => jobRow(j, i, pid, t, cmmsIdx)),
+    rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t, cmmsIdx)),
+    wo: woRows ? summarize(woRows) : null,
     more: rest.length,
     moreDone: rest.filter((j) => j.status === 'done').length,
   };
 }
 
-export function dashboardView(data, filterKey, t) {
+export function dashboardView(data, filterKey, t, backlog = null) {
   const f = filterFor(filterKey);
   const ids = f.ids;
   const jobs = data.jobs.filter((j) => ids.includes(j.plant));
@@ -66,7 +74,7 @@ export function dashboardView(data, filterKey, t) {
   const groups = GROUPS.map((g) => ({ ...g, ids: g.ids.filter((i) => ids.includes(i)) }))
     .filter((g) => g.ids.length)
     .map((g) => {
-      const plants = g.ids.map((id) => plantView(data, id, t));
+      const plants = g.ids.map((id) => plantView(data, id, t, backlog));
       const tt = plants.reduce((s, p) => s + p.total, 0);
       const dn = plants.reduce((s, p) => s + p.done, 0);
       return {

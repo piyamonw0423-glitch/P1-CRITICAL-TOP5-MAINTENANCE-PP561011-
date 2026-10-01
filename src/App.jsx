@@ -12,6 +12,8 @@ import { dashboardView } from './lib/view.js';
 import { readLocalBackup, useDashboardStore } from './lib/store.js';
 import { buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
+import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
+import { jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -27,6 +29,7 @@ const ERROR_TEXT = {
   bad_request: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง ตรวจสอบช่องที่กรอกแล้วลองใหม่',
   wrong_key: 'รหัสผ่านทีมไม่ถูกต้องหรือถูกเปลี่ยนแล้ว กดอัปเดตงานประจำวันแล้วใส่รหัสใหม่',
   read_only: 'บัญชีนี้ดูได้อย่างเดียว ขอสิทธิ์แก้ไขจากผู้ดูแลแดชบอร์ด',
+  no_password: 'ผู้ดูแลยังไม่ได้ตั้งรหัสทีม (EDIT_PASSWORD) เว็บจึงเป็นแบบดูอย่างเดียว',
   plant_full: `โรงนี้มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือแก้งานเดิมแทนการเพิ่มใหม่`,
 };
 const errorText = (e) => ERROR_TEXT[e?.code] || `บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่${e?.detail ? ` (${e.detail})` : ''}`;
@@ -45,6 +48,8 @@ export default function App() {
   const [backup] = useState(readLocalBackup);
   const [askKey, setAskKey] = useState(false);
   const [excel, setExcel] = useState(null); // { fileName, parsed } while previewing an Excel import
+  const [backlogUp, setBacklogUp] = useState(null); // { fileName, parsed } while previewing a CMMS upload
+  const [backlogFocus, setBacklogFocus] = useState(null); // { plant, n } to open the WO list on one plant
   const [flashId, setFlashId] = useState(null);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -83,7 +88,8 @@ export default function App() {
   const t = today0();
   const tKey = iso(t);
   // Recompute when the calendar day rolls over (t is derived from tKey).
-  const view = useMemo(() => dashboardView(data, filter, t), [data, filter, tKey]);
+  const view = useMemo(() => dashboardView(data, filter, t, store.backlog), [data, filter, tKey, store.backlog]);
+  const trackedWos = useMemo(() => new Set(data.jobs.filter((j) => j.wo).map((j) => normWo(j.wo))), [data.jobs]);
 
   // Run a store write; close dialogs and toast on success, keep the form open on failure.
   const run = async (fn, okText) => {
@@ -166,11 +172,32 @@ export default function App() {
 
   const importParsed = (d) => run(() => store.importData(d), `นำเข้า ${d.jobs.length} งานแล้ว`);
 
+  const uploadBacklogFile = async (f) => {
+    try {
+      setBacklogUp({ fileName: f.name, parsed: await parseBacklogWorkbook(f) });
+    } catch (e) {
+      setToast({ text: `อ่านไฟล์ WO Backlog ไม่ได้: ${e?.message || 'รูปแบบไฟล์ไม่ถูกต้อง'}`, error: true });
+    }
+  };
+
+  // Add a CMMS WO to Top 5: prefill the job form (the plant limit and password still apply).
+  const trackWo = (row) => {
+    const existing = data.jobs.find((j) => j.wo && normWo(j.wo) === normWo(row.wo));
+    if (existing) { setFlashId(existing.id); return; }
+    if (data.jobs.filter((j) => j.plant === row.plant).length >= MAX_JOBS_PER_PLANT) {
+      setToast({ text: `โรงไฟฟ้า ${row.plant} มีงานใน Top 5 ครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือปิดงานเดิมก่อน`, error: true });
+      return;
+    }
+    setModal({ type: 'job', job: jobFromWo(row, t, data.jobs.filter((j) => j.plant === row.plant).length + 1) });
+  };
+
   const importFile = async (f) => {
     if (/\.xlsx$/i.test(f.name)) {
       try {
         setExcel({ fileName: f.name, parsed: await parseWorkbook(f) });
       } catch (e) {
+        // Not our template — maybe the CMMS work-order export.
+        try { setBacklogUp({ fileName: f.name, parsed: await parseBacklogWorkbook(f) }); return; } catch { /* fall through */ }
         setToast({ text: `อ่านไฟล์ Excel ไม่ได้: ${e?.message || 'รูปแบบไฟล์ไม่ถูกต้อง'}`, error: true });
       }
       return;
@@ -217,12 +244,13 @@ export default function App() {
         editMode={editMode}
         canEdit={ready && canWrite !== false}
         readOnly={ready && canWrite === false}
+        readOnlyText={store.setup === 'no_password' ? 'ดูอย่างเดียว · ยังไม่ได้ตั้งรหัสทีม' : undefined}
         onToggleEdit={() => {
           if (!editMode && store.needsKey) setAskKey(true);
           else setEditMode((v) => !v);
         }}
       />
-      {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onReset={resetData} />}
+      {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onUploadBacklog={uploadBacklogFile} onReset={resetData} />}
 
       <main className="main">
         {status === 'connecting' && (
@@ -275,12 +303,24 @@ export default function App() {
                         onAddJob={() => openNew(p.id)}
                         onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
                         onPhoto={setLightbox}
+                        onOpenBacklog={(plant) => setBacklogFocus({ plant, n: Date.now() })}
                       />
                     ))}
                   </div>
                 </section>
               ))}
             </div>
+
+            <BacklogPanel
+              backlog={store.backlog}
+              ids={view.ids}
+              edit={editMode}
+              tracked={trackedWos}
+              today={t}
+              focus={backlogFocus}
+              onTrack={trackWo}
+              onUpload={() => document.getElementById('backlog-file')?.click()}
+            />
 
             <div className="insights">
               <BlockerSummary items={view.blockers} scopeLabel={scopeLabel} />
@@ -319,6 +359,18 @@ export default function App() {
       )}
       {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
       {ask && <ConfirmDialog {...ask} busy={busy} onCancel={closeAsk} />}
+      {backlogUp && (
+        <BacklogUploadDialog
+          {...backlogUp}
+          current={store.backlog}
+          busy={busy}
+          onCancel={() => setBacklogUp(null)}
+          onConfirm={async () => {
+            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: backlogUp.parsed.rows }), `อัปโหลด WO Backlog แล้ว · ${backlogUp.parsed.rows.length} WO`);
+            setBacklogUp(null);
+          }}
+        />
+      )}
       {excel && (
         <ExcelImportDialog
           {...excel}

@@ -21,6 +21,26 @@ const newId = (p) => `${p}${crypto.randomUUID()}`;
 
 const bad = (msg) => Object.assign(new Error(msg), { status: 400, expose: true });
 
+// WO Backlog snapshot from the CMMS export (one document, replaced on each upload).
+const MAX_BACKLOG = 5000;
+const WO_RE = /^[\w\-./]{1,40}$/;
+const BACKLOG_TEXT = { desc: 300, location: 80, asset: 80, parent: 40, workType: 20, nextApprove: 80, owner: 80, status: 30 };
+const BACKLOG_DATES = ['targetStart', 'targetFinish', 'schedStart', 'schedFinish', 'actualStart', 'actualFinish'];
+function cleanBacklog(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw bad('backlog file has no work orders');
+  if (rows.length > MAX_BACKLOG) throw bad(`backlog is limited to ${MAX_BACKLOG} work orders`);
+  return rows.map((r) => {
+    const wo = String(r?.wo ?? '').trim();
+    if (!WO_RE.test(wo)) throw bad(`invalid work order "${wo.slice(0, 40)}"`);
+    const plant = Number(r.plant);
+    if (!PLANT_IDS.includes(plant)) throw bad(`invalid plant for ${wo}`);
+    const out = { wo, plant, value: Math.max(0, Number(r.value) || 0) };
+    for (const [f, max] of Object.entries(BACKLOG_TEXT)) out[f] = String(r[f] ?? '').slice(0, max);
+    for (const f of BACKLOG_DATES) out[f] = DATE_RE.test(r[f]) ? r[f] : null;
+    return out;
+  });
+}
+
 // Sample jobs removed when the dashboard was limited to 5 jobs per plant; deleted once from
 // databases seeded earlier, and only while they still carry the sample WO number and text.
 const TRIMMED_SAMPLES = [
@@ -165,6 +185,7 @@ export function createDb(conn) {
         history: rows.filter((r) => r.collection === 'history').map((r) => r.data).sort((a, b) => a.date.localeCompare(b.date)),
         updatedAt: meta?.data.updatedAt || null,
         updatedBy: meta?.data.updatedBy || null,
+        backlogAt: (await conn.query("SELECT data->>'uploadedAt' AS at FROM docs WHERE collection = 'backlog' AND id = 'current'")).rows[0]?.at || null,
       };
     },
 
@@ -198,6 +219,17 @@ export function createDb(conn) {
         await del(c, 'jobs', id);
         await stamp(c, by);
       });
+    },
+
+    async backlog() {
+      const r = await conn.query("SELECT data FROM docs WHERE collection = 'backlog' AND id = 'current'");
+      return r.rows[0]?.data || null;
+    },
+
+    saveBacklog(body, by) {
+      const rows = cleanBacklog(body?.rows);
+      const doc = { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows };
+      return tx(async (c) => { await put(c, 'backlog', 'current', doc); await stamp(c, by); });
     },
 
     saveImpact(pid, impact, by) {

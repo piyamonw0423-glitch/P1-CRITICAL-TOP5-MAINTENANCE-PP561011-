@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { DONE, DOING, MAX_JOBS_PER_PLANT, STUCK } from '../lib/data.js';
+import { GroupSummary } from './Backlog.jsx';
 
 const R = 40;
 const C = 2 * Math.PI * R;
@@ -40,6 +41,11 @@ function JobRow({ row, edit, flash, onEdit, onPhoto }) {
         <span className="job-action">→ {job.action}</span>
         <div className="job-meta">
           {job.wo && <span className="job-wo">{job.wo}</span>}
+          {row.cmms && (
+            <span className={`cmms-badge${row.cmms.closed ? ' is-closed' : ''}`} title={row.cmms.closed ? 'CMMS ปิดงานนี้แล้ว — พิจารณาเอาออกจาก Top 5' : 'สถานะล่าสุดใน CMMS'}>
+              CMMS {row.cmms.status}{row.cmms.closed ? ' · ปิดแล้ว' : ''}
+            </span>
+          )}
           <span className="job-owner">{job.owner}</span>
           <span className="muted">{job.team}</span>
           <span className="muted nowrap">{row.range}</span>
@@ -76,11 +82,15 @@ function JobRow({ row, edit, flash, onEdit, onPhoto }) {
   );
 }
 
-export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEditImpact, onPhoto }) {
+export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEditImpact, onPhoto, onOpenBacklog }) {
   // Unfinished Top 5 always shown; finished/other jobs fold behind a chevron (opened for a just-saved job).
   const [expanded, setExpanded] = useState(false);
   const showRest = expanded || p.rest.some((r) => r.job.id === flashId);
-  const restLabel = [p.moreDone && `เสร็จแล้ว ${p.moreDone} งาน`, p.more - p.moreDone && `งานอื่น ${p.more - p.moreDone} งาน`].filter(Boolean).join(' · ');
+  const restLabel = [
+    p.moreDone && `เสร็จแล้ว ${p.moreDone} งาน`,
+    p.more - p.moreDone && `งานอื่น ${p.more - p.moreDone} งาน`,
+    p.wo && `WO ค้างใน CMMS ${p.wo.open} งาน`,
+  ].filter(Boolean).join(' · ');
   return (
     <article className="plant" style={{ '--pc': p.color, '--pt': p.tint, '--pd': p.dark }}>
       <div className="plant-head">
@@ -117,7 +127,7 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
         {p.top.map((row) => (
           <JobRow key={row.job.id} row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
         ))}
-        {p.more > 0 && (
+        {(p.more > 0 || p.wo) && (
           <>
             <button
               type="button"
@@ -135,6 +145,13 @@ export default function PlantCard({ p, edit, flashId, onEditJob, onAddJob, onEdi
                 {p.rest.map((row) => (
                   <JobRow key={row.job.id} row={row} edit={edit} flash={row.job.id === flashId} onEdit={() => onEditJob(row.job)} onPhoto={onPhoto} />
                 ))}
+                {p.wo && (
+                  <div className="plant-wo">
+                    <div className="plant-wo-head">WO Backlog P1 ใน CMMS · ค้าง {p.wo.open} จาก {p.wo.total} WO</div>
+                    <GroupSummary summary={p.wo} />
+                    <button type="button" className="linklike" onClick={() => onOpenBacklog(p.id)}>ดูรายการ WO ของ{p.name} →</button>
+                  </div>
+                )}
               </div>
             )}
           </>

@@ -20,6 +20,9 @@ Full system doc, work log and roadmap: `docs/SYSTEM.md` (Thai). User-facing guid
   because pg timers do not fire on workerd. First connection creates the table and seeds 20 sample jobs once (`meta/seeded`); older DBs get the 6 extra samples removed once (`meta/trim5`).
 
 ## Conventions
+- WO Backlog: CMMS "List of Work Orders" export parsed in the browser (`src/lib/cmms.js`), stored as one snapshot doc `backlog/current`,
+  shown in `components/Backlog.jsx`; Top 5 jobs link to it by WO number. Status groups are the team's (see docs/SYSTEM.md §8.1).
+- No `EDIT_PASSWORD` (and no Access editor list) → API is view-only (`setup: 'no_password'`) unless `ALLOW_OPEN_EDIT=true`.
 - Max 5 jobs per plant (`MAX_JOBS_PER_PLANT` in `src/lib/data.js`), enforced in UI, all stores, server (`plant_full`) and Excel import.
 - Dates are `YYYY-MM-DD` strings; "today" is Thai time (UTC+7). Job buckets: done / stuck (pending or overdue) / doing.
 - Imports without a `photos` key must keep existing photos (all three backends honour this); `replace: true` deletes jobs not imported.
