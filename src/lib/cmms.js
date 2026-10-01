@@ -42,6 +42,22 @@ const FIELDS = {
   parent: 'Parent WO', workType: 'Work Type', nextApprove: 'Next Approve', owner: 'ON BEHALF OF NAME',
   targetStart: 'Target Start', targetFinish: 'Target Finish', schedStart: 'Scheduled Start', schedFinish: 'Scheduled Finish',
   actualStart: 'Actual Start', actualFinish: 'Actual Finish', value: 'Est. Job Value',
+  workLoc: 'WO_Worklocation', supervisor: 'Supervisor',
+};
+
+/** Maintenance teams, from the export's WO_Worklocation code (column Q). Order = display order. */
+export const TEAMS = [
+  { k: 'MECH', label: 'MECH', codes: ['WL5112'] },
+  { k: 'ELEC', label: 'ELEC', codes: ['WL5115'] },
+  { k: 'AUTO', label: 'AUTO', codes: ['WL5118'] },
+  { k: 'EMER', label: 'EMER', codes: ['WL5122', 'WL5123'] },
+  { k: 'OTHER', label: 'ไม่ระบุ', codes: [] },
+];
+const TEAM_BY_CODE = Object.fromEntries(TEAMS.flatMap((t) => t.codes.map((c) => [c, t.k])));
+/** Team key for a work-location code (also accepts a code that already carries the team name). */
+export const teamOf = (workLoc) => {
+  const code = String(workLoc || '').trim().toUpperCase();
+  return TEAM_BY_CODE[code] || TEAMS.find((t) => t.k !== 'OTHER' && code.includes(t.k))?.k || 'OTHER';
 };
 const DATE_FIELDS = ['targetStart', 'targetFinish', 'schedStart', 'schedFinish', 'actualStart', 'actualFinish'];
 
@@ -77,7 +93,8 @@ export async function parseBacklogWorkbook(file) {
       const status = str(get('status'), 30).toUpperCase();
       if (groupOf(status).key === 'other') unknown.add(status || '(ว่าง)');
       const row = { wo, plant, status };
-      for (const f of ['desc', 'location', 'asset', 'parent', 'workType', 'nextApprove', 'owner']) row[f] = str(get(f), f === 'desc' ? 300 : 80);
+      for (const f of ['desc', 'location', 'asset', 'parent', 'workType', 'nextApprove', 'owner', 'workLoc', 'supervisor']) row[f] = str(get(f), f === 'desc' ? 300 : 80);
+      row.team = teamOf(row.workLoc);
       for (const f of DATE_FIELDS) row[f] = thaiDay(get(f));
       row.value = Number(get('value')) || 0;
       rows.push(row);
@@ -173,3 +190,80 @@ export function mergeBacklog(current, incoming, today, removeMissing = false, no
 export const latestSeen = (rows) => rows.reduce((m, r) => (r.seenAt && r.seenAt > m ? r.seenAt : m), '');
 /** Did the latest upload change this row's status? */
 export const changedIn = (r, latest) => !!(latest && r.changedAt === latest);
+
+/* ---------------- daily performance (recorded on every upload) ---------------- */
+
+const WORKING = new Set(['inprg', 'rework']);
+const DOING_OR_DONE = new Set(['inprg', 'rework', 'finish', 'closed']);
+const rowTeam = (r) => r.team || teamOf(r.workLoc);
+const tuple = (r) => [r.wo, r.plant, rowTeam(r)];
+
+/**
+ * What happened between two backlog snapshots on `day` (YYYY-MM-DD), as [wo, plant, team] lists:
+ * new WOs, started (moved from waiting into APPR/INPRG/REWORK, or Actual Start = day),
+ * finished (moved into FINISH/WACCEPT/COMP, or Actual Finish = day) and closed (moved into CLOSED).
+ * With no previous snapshot only the date columns count, so the first upload does not report every WO as new.
+ */
+export function dayEvents(prevRows, nextRows, day) {
+  const old = new Map((prevRows || []).map((r) => [normWo(r.wo), r]));
+  const hasPrev = old.size > 0;
+  const ev = { new: [], started: [], finished: [], closed: [] };
+  for (const r of nextRows) {
+    const prev = old.get(normWo(r.wo));
+    const g = groupOf(r.status).key;
+    const pg = prev ? groupOf(prev.status).key : null;
+    if (!prev && hasPrev) ev.new.push(tuple(r));
+    const moved = prev && prev.status !== r.status;
+    if ((moved && !DOING_OR_DONE.has(pg) && WORKING.has(g)) || (r.actualStart === day && prev?.actualStart !== day)) ev.started.push(tuple(r));
+    if ((moved && g === 'finish' && !isClosedGroup(pg)) || (r.actualFinish === day && prev?.actualFinish !== day && !isClosedGroup(pg))) ev.finished.push(tuple(r));
+    if (moved && g === 'closed') ev.closed.push(tuple(r));
+  }
+  return ev;
+}
+
+const AGE_BUCKETS = [['a7', 7], ['a30', 30], ['a90', 90], ['aMore', Infinity]];
+
+/** Open (not finished/closed) WOs per "plant|team" with age buckets, plus finished-waiting-to-close counts. */
+export function openSnapshot(rows, today) {
+  const by = {};
+  for (const r of rows) {
+    const g = groupOf(r.status).key;
+    if (g === 'closed') continue;
+    const k = `${r.plant}|${rowTeam(r)}`;
+    const o = (by[k] ||= { open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 });
+    if (g === 'finish') { o.finish++; continue; }
+    o.open++;
+    const age = ageDays(r, today) ?? 0;
+    o[AGE_BUCKETS.find(([, max]) => age <= max)[0]]++;
+  }
+  return by;
+}
+
+/**
+ * Fold one upload into that day's stats document. Event lists are unions by WO, so uploading at 09:30
+ * and again at 16:00 never counts a WO twice; the open snapshot is the latest of the day.
+ */
+export function foldDayStats(prev, { day, events, snapshot, at, fileName }) {
+  const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120) }].slice(-12) };
+  for (const k of ['new', 'started', 'finished', 'closed']) {
+    const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
+    out[k] = [...(prev?.[k] || []), ...events[k].filter((t) => !seen.has(normWo(t[0])))].slice(0, 2000);
+  }
+  out.open = snapshot;
+  return out;
+}
+
+/** Sum a stats document for some plants and (optionally) one team. */
+export function statTotals(doc, ids, team = null) {
+  const keep = (plant, t) => ids.includes(Number(plant)) && (!team || t === team);
+  const t = { new: 0, started: 0, finished: 0, closed: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
+  if (!doc) return t;
+  for (const k of ['new', 'started', 'finished', 'closed']) t[k] = (doc[k] || []).filter(([, p, tm]) => keep(p, tm)).length;
+  for (const [key, o] of Object.entries(doc.open || {})) {
+    const [p, tm] = key.split('|');
+    if (!keep(p, tm)) continue;
+    for (const f of ['open', 'finish', 'a7', 'a30', 'a90', 'aMore']) t[f] += o[f] || 0;
+  }
+  return t;
+}
+

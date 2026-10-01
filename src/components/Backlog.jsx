@@ -74,7 +74,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
       if (flag === 'changed' && !isChanged(r)) return false;
       if (flag === 'missing' && !isMissing(r)) return false;
       if (!flag && (groups.length ? !groups.includes(g) : !showClosed && isClosedGroup(g))) return false;
-      const hay = `${r.wo} ${r.desc} ${r.location} ${r.asset} ${r.owner} ${r.nextApprove} ${r.status}`.toLowerCase();
+      const hay = `${r.wo} ${r.desc} ${r.location} ${r.asset} ${r.owner} ${r.nextApprove} ${r.status} ${r.team || ''} ${r.supervisor || ''}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     }).map((r) => ({ ...r, age: ageDays(r, today) }));
     const by = {
@@ -119,7 +119,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
                 <option value="all">ทุกโรงที่เลือก</option>
                 {PLANT_IDS.filter((p) => ids.includes(p)).map((p) => <option key={p} value={p}>โรงไฟฟ้า {p}</option>)}
               </select>
-              <input type="search" aria-label="ค้นหา WO" placeholder="ค้นหา เลข WO, คำอธิบาย, Asset, ชื่อ…" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
+              <input type="search" aria-label="ค้นหา WO" placeholder="ค้นหา เลข WO, คำอธิบาย, Asset, ชื่อ, ทีม (MECH/ELEC/AUTO/EMER)…" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
               <select aria-label="เรียงตาม" value={sort} onChange={(e) => setSort(e.target.value)}>
                 <option value="age">ค้างนานสุดก่อน</option>
                 <option value="value">มูลค่างานสูงสุดก่อน</option>
@@ -144,7 +144,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
                     return (
                       <tr key={r.wo} className={isTracked ? 'is-tracked' : ''}>
                         <td className="mono">{r.wo}{r.parent && <div className="sub">ย่อยของ {r.parent}</div>}</td>
-                        <td className="desc">{r.desc}<div className="sub">{[r.location, r.asset].filter(Boolean).join(' · ')}</div></td>
+                        <td className="desc">{r.desc}<div className="sub">{[r.team && r.team !== 'OTHER' ? `ทีม ${r.team}` : '', r.location, r.asset].filter(Boolean).join(' · ')}</div></td>
                         <td><span className="plant-dot" style={{ '--pc': PLANT_META[r.plant].color }}>{r.plant}</span></td>
                         <td>
                           <GroupChip status={r.status} />

@@ -418,3 +418,47 @@ a { color: oklch(0.5 0.17 255); }
 .job.is-dragging .drag-handle { cursor: grabbing; }
 .job.drop-before { box-shadow: inset 0 3px 0 var(--pc); }
 .job.drop-after { box-shadow: inset 0 -3px 0 var(--pc); }
+/* ---------- Daily CMMS report ---------- */
+.rep { display: flex; flex-direction: column; }
+.rep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--font-body); }
+.rep-select { border: 0; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: white; }
+.rep-copy { padding: 6px 14px; font-size: 13px; }
+.rep-empty { margin: 0; padding: 16px 18px; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
+.rep-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 18px 0; }
+.chip { border: 1px solid var(--line); background: white; color: var(--ink-2); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.chip.is-on { background: var(--navy); border-color: var(--navy); color: white; }
+.rep-rounds { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+.rep-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; padding: 12px 18px; }
+.rep-tile { border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rep-tile-label { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.rep-tile-value { font-family: var(--font-head); font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rep-tile-sub { font-size: 12px; color: var(--muted); }
+.rep-tile.is-start { border-top: 4px solid oklch(0.55 0.15 255); }
+.rep-tile.is-close { border-top: 4px solid oklch(0.62 0.16 150); }
+.rep-tile.is-up .rep-tile-sub { color: var(--stuck-ink); font-weight: 700; }
+.rep-tile.is-down .rep-tile-sub { color: var(--done-ink); font-weight: 700; }
+.rep-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; padding: 0 18px 16px; }
+.rep-sub { font-size: 13.5px; font-weight: 700; color: var(--ink); margin: 8px 0 4px; }
+.rep-chart { position: relative; }
+.rep-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--navy); color: white; border-radius: 10px; padding: 6px 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; white-space: nowrap; box-shadow: 0 6px 16px oklch(0.2 0.05 258 / 0.25); }
+.rep-tip span { display: flex; align-items: center; gap: 5px; }
+.rep-tip i { width: 9px; height: 9px; border-radius: 3px; }
+.rep-tip .muted { color: var(--on-navy-muted); }
+.rep-table-wrap { overflow-x: auto; }
+.rep-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.rep-table th, .rep-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line-soft); }
+.rep-table thead th { white-space: nowrap; font-size: 12px; color: var(--muted); font-weight: 700; }
+.rep-table tbody th { text-align: left; font-weight: 700; }
+.rep-table tbody tr { cursor: pointer; }
+.rep-table tbody tr:hover, .rep-table tbody tr.is-on { background: oklch(0.96 0.02 250); }
+.rep-oldest { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rep-oldest li { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 8px; align-items: baseline; font-size: 13px; padding: 6px 8px; border-radius: 10px; background: oklch(0.98 0.005 250); }
+.rep-age { font-weight: 700; color: var(--stuck-ink); white-space: nowrap; }
+.rep-wo { font-weight: 700; }
+.rep-desc { grid-column: 1 / -1; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+  .rep-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rep-grid { grid-template-columns: minmax(0, 1fr); }
+  .rep-rounds { margin-left: 0; width: 100%; }
+}
+@media (max-width: 480px) { .rep-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

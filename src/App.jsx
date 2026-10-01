@@ -17,6 +17,7 @@ import { jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
 import { findDuplicates } from './lib/dedupe.js';
 import DuplicatesDialog from './components/Duplicates.jsx';
 import { BulkDeleteDialog, SelectBar } from './components/Selection.jsx';
+import DailyReport from './components/Report.jsx';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -356,6 +357,8 @@ export default function App() {
                 </section>
               ))}
             </div>
+
+            <DailyReport stats={store.stats} backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
 
             <BacklogPanel
               backlog={store.backlog}

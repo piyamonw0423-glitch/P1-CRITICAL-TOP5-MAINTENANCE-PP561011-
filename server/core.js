@@ -3,6 +3,7 @@
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
 import { iso } from '../src/lib/dates.js';
+import { dayEvents, foldDayStats, openSnapshot, teamOf } from '../src/lib/cmms.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,7 +25,7 @@ const bad = (msg) => Object.assign(new Error(msg), { status: 400, expose: true }
 // WO Backlog snapshot from the CMMS export (one document, replaced on each upload).
 const MAX_BACKLOG = 5000;
 const WO_RE = /^[\w\-./]{1,40}$/;
-const BACKLOG_TEXT = { desc: 300, location: 80, asset: 80, parent: 40, workType: 20, nextApprove: 80, owner: 80, status: 30, prevStatus: 30 };
+const BACKLOG_TEXT = { desc: 300, location: 80, asset: 80, parent: 40, workType: 20, nextApprove: 80, owner: 80, status: 30, prevStatus: 30, workLoc: 40, supervisor: 80 };
 const BACKLOG_DATES = ['targetStart', 'targetFinish', 'schedStart', 'schedFinish', 'actualStart', 'actualFinish', 'firstSeen', 'lastSeen', 'statusSince'];
 function cleanBacklog(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw bad('backlog file has no work orders');
@@ -43,6 +44,7 @@ function cleanBacklog(rows) {
     const out = { wo, plant, value: Math.max(0, Number(r.value) || 0) };
     for (const [f, max] of Object.entries(BACKLOG_TEXT)) out[f] = String(r[f] ?? '').slice(0, max);
     for (const f of BACKLOG_DATES) out[f] = DATE_RE.test(r[f]) ? r[f] : null;
+    out.team = teamOf(out.workLoc); // derived here, never trusted from the browser
     for (const f of ['seenAt', 'changedAt']) out[f] = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(r[f]) ? r[f] : null;
     return out;
   });
@@ -268,7 +270,23 @@ export function createDb(conn) {
     saveBacklog(body, by) {
       const rows = cleanBacklog(body?.rows);
       const doc = { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows };
-      return tx(async (c) => { await put(c, 'backlog', 'current', doc); await stamp(c, by); });
+      return tx(async (c) => {
+        // Record the day's performance (new / started / finished / closed + open snapshot) against the previous upload.
+        const prev = (await c.query("SELECT data FROM docs WHERE collection = 'backlog' AND id = 'current'")).rows[0]?.data;
+        const t = bangkokToday();
+        const day = iso(t);
+        const old = (await c.query("SELECT data FROM docs WHERE collection = 'stats' AND id = $1", [day])).rows[0]?.data;
+        const stats = foldDayStats(old, { day, events: dayEvents(prev?.rows, rows, day), snapshot: openSnapshot(rows, t), at: doc.uploadedAt, fileName: doc.fileName });
+        await put(c, 'stats', day, stats);
+        await put(c, 'backlog', 'current', doc);
+        await stamp(c, by);
+      });
+    },
+
+    /** Daily performance documents, oldest first (the last `days` days that had an upload). */
+    async stats(days = 90) {
+      const r = await conn.query("SELECT data FROM docs WHERE collection = 'stats' ORDER BY id DESC LIMIT $1", [Math.min(366, Math.max(1, days))]);
+      return r.rows.map((x) => x.data).reverse();
     },
 
     saveImpact(pid, impact, by) {

@@ -50,6 +50,7 @@ export async function handleApi(db, { method, path, body, perm }) {
     if (method === 'GET' && path === '/api/health') { await db.ping(); return ok(); }
     if (method === 'GET' && path === '/api/me') return ok({ email: perm.email, canWrite: perm.canWrite, needsKey: perm.needsKey, setup: perm.setup });
     if (method === 'GET' && path === '/api/backlog') return ok(await db.backlog());
+    if (method === 'GET' && path === '/api/stats') return ok({ days: await db.stats() });
     if (method === 'GET' && path === '/api/state') return ok(await db.state());
     if (method === 'GET' && path === '/api/version') return ok(await db.version());
     if (method === 'GET' && m?.[1] === 'photos') {

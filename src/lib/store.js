@@ -2,6 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
 import { iso, today0 } from './dates.js';
 import { sameWo } from './dedupe.js';
+import { dayEvents, foldDayStats, openSnapshot } from './cmms.js';
+
+// Fold one CMMS upload into today's performance document (same rules as the server's saveBacklog).
+const statsAfterUpload = (prevRows, rows, old, fileName, at) => {
+  const t = today0();
+  const day = iso(t);
+  return foldDayStats(old, { day, events: dayEvents(prevRows, rows, day), snapshot: openSnapshot(rows, t), at, fileName });
+};
 
 /*
  * Data layer. Two backends behind one hook:
@@ -93,6 +101,7 @@ function useApiStore() {
   const [editKey, setEditKey] = useState(readKey);
   const [problem, setProblem] = useState('');
   const [backlog, setBacklog] = useState(null); // CMMS WO snapshot, fetched only when backlogAt changes
+  const [stats, setStats] = useState([]); // daily performance docs, refreshed with the backlog
   const versionRef = useRef(null);
   const backlogAtRef = useRef(undefined);
 
@@ -106,7 +115,10 @@ function useApiStore() {
     if (d.backlogAt !== backlogAtRef.current) {
       backlogAtRef.current = d.backlogAt;
       if (!d.backlogAt) setBacklog(null);
-      else fetchT('api/backlog', { cache: 'no-store' }).then((b) => (b.ok ? b.json() : null)).then((b) => b && setBacklog(b)).catch(() => {});
+      else {
+        fetchT('api/backlog', { cache: 'no-store' }).then((b) => (b.ok ? b.json() : null)).then((b) => b && setBacklog(b)).catch(() => {});
+        fetchT('api/stats', { cache: 'no-store' }).then((b) => (b.ok ? b.json() : null)).then((b) => b && setStats(b.days || [])).catch(() => {});
+      }
     }
   }, []);
 
@@ -183,6 +195,7 @@ function useApiStore() {
     unlock,
     data,
     backlog,
+    stats,
     uploadBacklog: (b) => send('PUT', 'api/backlog', b),
     whoUpdated: data.updatedBy || '',
     unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
@@ -212,10 +225,13 @@ function useApiStore() {
 
 const BACKLOG_KEY = 'p1dash.backlog';
 const readBacklog = () => { try { return JSON.parse(localStorage.getItem(BACKLOG_KEY)); } catch { return null; } };
+const STATS_KEY = 'p1dash.stats';
+const readStats = () => { try { return JSON.parse(localStorage.getItem(STATS_KEY)) || []; } catch { return []; } };
 
 function useLocalStore() {
   const [data, setData] = useState(loadData);
   const [backlog, setBacklog] = useState(readBacklog);
+  const [stats, setStats] = useState(readStats);
   const commit = (next) => {
     const { next: saved, ok } = commitData(next);
     setData(saved);
@@ -227,10 +243,17 @@ function useLocalStore() {
     canWrite: true,
     data,
     backlog,
+    stats,
     uploadBacklog: async ({ fileName, rows }) => {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
-      try { localStorage.setItem(BACKLOG_KEY, JSON.stringify(doc)); } catch { throw new StoreError('quota_exceeded'); }
+      const day = statsAfterUpload(backlog?.rows, rows, stats.find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
+      const nextStats = stats.filter((x) => x.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date)).slice(-120);
+      try {
+        localStorage.setItem(BACKLOG_KEY, JSON.stringify(doc));
+        localStorage.setItem(STATS_KEY, JSON.stringify(nextStats));
+      } catch { throw new StoreError('quota_exceeded'); }
       setBacklog(doc);
+      setStats(nextStats);
     },
     whoUpdated: '',
     saveJob: async (job) => {
@@ -297,6 +320,7 @@ function useSharedStore() {
         db.collection('history').onSnapshot((s) => setParts((p) => ({ ...p, history: s.docs.map((d) => d.data()) })), onErr),
         db.doc('meta/app').onSnapshot((s) => setParts((p) => ({ ...p, meta: s.exists ? s.data() : {} })), onErr),
         db.doc('backlog/current').onSnapshot((s) => setParts((p) => ({ ...p, backlog: s.exists ? s.data() : null })), onErr),
+        db.collection('stats').onSnapshot((s) => setParts((p) => ({ ...p, stats: s.docs.map((d) => d.data()).sort((a, b) => a.date.localeCompare(b.date)) })), onErr),
       );
     })();
     return () => { alive = false; unsubs.forEach((u) => u()); };
@@ -412,10 +436,13 @@ function useSharedStore() {
       await stamp(db, (partsRef.current.jobs || []).filter((j) => !ids.includes(j.id)));
     }),
     backlog: parts.backlog || null,
-    // One document (≤ 256 KiB in the artifact store), replaced on every upload.
+    stats: parts.stats || [],
+    // One document (≤ 256 KiB in the artifact store), replaced on every upload; plus stats/<day>.
     uploadBacklog: ({ fileName, rows }) => guard(async (db) => {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
       if (JSON.stringify(doc).length > 250000) throw new StoreError('quota_exceeded');
+      const day = statsAfterUpload(partsRef.current.backlog?.rows, rows, (partsRef.current.stats || []).find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
+      await call(() => db.doc(`stats/${day.date}`).set(day));
       await call(() => db.doc('backlog/current').set(doc));
       await stamp(db, partsRef.current.jobs || []);
     }),
