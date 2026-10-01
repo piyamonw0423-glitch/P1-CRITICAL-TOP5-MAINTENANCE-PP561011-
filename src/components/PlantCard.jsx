@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { DONE, DOING, MAX_JOBS_PER_PLANT, STUCK } from '../lib/data.js';
 import { GroupSummary } from './Backlog.jsx';
@@ -28,10 +28,17 @@ const clickable = (edit, fn) =>
     ? { role: 'button', tabIndex: 0, onClick: fn, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } } }
     : {};
 
-function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto, onMove }) {
+function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto, onMove, drag }) {
   const { job } = row;
+  const cls = `job${edit ? ' is-editable' : ''}${checked ? ' is-selected' : ''}${flash ? ' is-flash' : ''}${drag?.active ? ' is-dragging' : ''}${drag?.mark ? ` drop-${drag.mark}` : ''}`;
   return (
-    <div id={`job-${job.id}`} className={`job${edit ? ' is-editable' : ''}${checked ? ' is-selected' : ''}${flash ? ' is-flash' : ''}`} {...clickable(edit, onEdit)}>
+    <div
+      id={`job-${job.id}`}
+      className={cls}
+      data-open-id={onMove ? job.id : undefined}
+      style={drag?.active ? { transform: `translateY(${drag.dy}px)` } : undefined}
+      {...clickable(edit, onEdit)}
+    >
       {edit && (
         // Tick to select for bulk delete; clicks here must not open the edit form.
         <label className="job-check" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
@@ -42,8 +49,9 @@ function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto, onMove })
         // ▲▼ change the job's place in its ranked list (only open jobs are ranked).
         <span className="job-order" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <button type="button" className="order-btn" disabled={!onMove.up} onClick={onMove.up} aria-label={`เลื่อน ${job.issue} ขึ้น`}>▲</button>
-          <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
+          <span className="job-rank drag-handle" style={{ background: row.rankBg }} onPointerDown={onMove.drag} title="ลากเพื่อเปลี่ยนลำดับ">{row.rank}</span>
           <button type="button" className="order-btn" disabled={!onMove.down} onClick={onMove.down} aria-label={`เลื่อน ${job.issue} ลง`}>▼</button>
+          <span className="drag-grip drag-handle" onPointerDown={onMove.drag} title="ลากเพื่อเปลี่ยนลำดับ" aria-hidden="true">⠿</span>
         </span>
       ) : (
         <span className="job-rank" style={{ background: row.rankBg }}>{row.rank}</span>
@@ -123,6 +131,47 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
     if (i < 0 || j < 0 || j >= order.length) return null;
     return () => { [order[i], order[j]] = [order[j], order[i]]; onReorder(order); };
   };
+  // Drag a job by its rank badge or grip (pointer events: mouse, pen and touch). Visible open rows are always
+  // a prefix of the list's order, so the drop position among them maps straight onto L.openIds.
+  const cardRef = useRef(null);
+  const [drag, setDrag] = useState(null); // { id, dy, target, mark }
+  const startDrag = (id) => (e) => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget;
+    handle.setPointerCapture?.(e.pointerId);
+    const y0 = e.clientY;
+    const place = (y) => {
+      const others = [...cardRef.current.querySelectorAll('[data-open-id]')].filter((el) => el.dataset.openId !== id);
+      const k = others.filter((el) => { const r = el.getBoundingClientRect(); return y > r.top + r.height / 2; }).length;
+      const ids = others.map((el) => el.dataset.openId);
+      return { k, ids, target: ids[k] ?? ids[ids.length - 1], mark: ids.length ? (k < ids.length ? 'before' : 'after') : null };
+    };
+    setDrag({ id, dy: 0 });
+    const move = (ev) => {
+      if (ev.clientY < 60) window.scrollBy(0, -12);
+      else if (ev.clientY > window.innerHeight - 60) window.scrollBy(0, 12);
+      const { target, mark } = place(ev.clientY);
+      setDrag({ id, dy: ev.clientY - y0, target, mark });
+    };
+    const end = (ev, drop) => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onCancel);
+      setDrag(null);
+      if (!drop) return;
+      const { k, ids } = place(ev.clientY);
+      const hidden = L.openIds.filter((x) => x !== id && !ids.includes(x));
+      const order = [...ids.slice(0, k), id, ...ids.slice(k), ...hidden];
+      if (order.join() !== L.openIds.join()) onReorder(order);
+    };
+    const onUp = (ev) => end(ev, true);
+    const onCancel = (ev) => end(ev, false);
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onCancel);
+  };
   const rowProps = (row) => ({
     row,
     edit,
@@ -130,11 +179,12 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
     checked: !!selected?.has(row.job.id),
     onCheck: (on) => onSelect([row.job.id], on),
     onEdit: () => onEditJob(row.job),
-    onMove: row.job.status !== 'done' ? { up: move(row.job.id, -1), down: move(row.job.id, 1) } : null,
+    onMove: row.job.status !== 'done' ? { up: move(row.job.id, -1), down: move(row.job.id, 1), drag: startDrag(row.job.id) } : null,
+    drag: drag && (drag.id === row.job.id ? { active: true, dy: drag.dy } : drag.target === row.job.id ? { mark: drag.mark } : null),
     onPhoto,
   });
   return (
-    <article className="plant" style={{ '--pc': p.color, '--pt': p.tint, '--pd': p.dark }}>
+    <article ref={cardRef} className="plant" style={{ '--pc': p.color, '--pt': p.tint, '--pd': p.dark }}>
       <div className="plant-head">
         <span className="plant-head-icon"><Icon name="factory" /></span>
         <h3 className="plant-name">{p.name}</h3>

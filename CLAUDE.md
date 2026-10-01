@@ -25,7 +25,7 @@ Full system doc, work log and roadmap: `docs/SYSTEM.md` (Thai). User-facing guid
   status, keeps prevStatus/statusSince/changedAt/seenAt; missing WOs kept and flagged unless removed).
 - One Top 5 job per WO number (form, stores, server `duplicate_wo`); "ลบงานซ้ำ" uses `findDuplicates` in `src/lib/dedupe.js`. Status groups are the team's (see docs/SYSTEM.md §8.1).
 - No `EDIT_PASSWORD` (and no Access editor list) → API is view-only (`setup: 'no_password'`) unless `ALLOW_OPEN_EDIT=true`.
-- Two ranked lists per plant (`LISTS`/`listOf` in `src/lib/data.js`: job `list` = `risk` (BD, default for old jobs) | `daily`); each shows the first `TOP_N`=5 open jobs by rank, extras/done fold away. ▲▼ save the list order via `reorderJobs` (`POST /api/jobs/rank`).
+- Two ranked lists per plant (`LISTS`/`listOf` in `src/lib/data.js`: job `list` = `risk` (BD, default for old jobs) | `daily`); each shows the first `TOP_N`=5 open jobs by rank, extras/done fold away. ▲▼ or drag (pointer events on the rank badge / ⠿ grip, mouse + touch) save the list order via `reorderJobs` (`POST /api/jobs/rank`).
 - Safety cap `MAX_JOBS_PER_PLANT`=30 (both lists), enforced in UI, all stores, server (`plant_full`) and Excel import.
 - Dates are `YYYY-MM-DD` strings; "today" is Thai time (UTC+7). Job buckets: done / stuck (pending or overdue) / doing.
 - Imports without a `photos` key must keep existing photos (all three backends honour this); `replace: true` deletes jobs not imported.
