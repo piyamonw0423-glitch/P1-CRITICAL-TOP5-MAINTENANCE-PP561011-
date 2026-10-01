@@ -64,10 +64,12 @@ export async function parseBacklogWorkbook(file) {
     const rows = [];
     const skipped = {};
     const unknown = new Set();
+    let dupes = 0;
     for (const r of sheet.data.slice(at + 1)) {
       const get = (f) => (idx[f] >= 0 ? r[idx[f]] : null);
       const wo = str(get('wo'), 40);
-      if (!wo || seen.has(normWo(wo))) continue;
+      if (!wo) continue;
+      if (seen.has(normWo(wo))) { dupes++; continue; } // same WO twice in the file: count once
       seen.add(normWo(wo));
       const plantCode = str(get('plant'));
       const plant = Number(plantCode.replace(/\D/g, ''));
@@ -80,7 +82,7 @@ export async function parseBacklogWorkbook(file) {
       row.value = Number(get('value')) || 0;
       rows.push(row);
     }
-    return { rows, skipped: Object.entries(skipped).map(([plant, count]) => ({ plant, count })), unknownStatuses: [...unknown] };
+    return { rows, duplicates: dupes, skipped: Object.entries(skipped).map(([plant, count]) => ({ plant, count })), unknownStatuses: [...unknown] };
   }
   throw new Error('ไม่พบหัวคอลัมน์ "Work Order", "Status", "Plant" — ใช้ไฟล์ List of Work Orders ที่ export จาก CMMS');
 }
@@ -130,3 +132,44 @@ export function jobFromWo(row, today, rank = 1) {
     photos: [],
   };
 }
+
+/**
+ * Merge a new CMMS export into the current snapshot, keyed by WO number (duplicates count once).
+ * New WOs are added, changed statuses are updated (remembering the previous status and the day it
+ * changed), unchanged WOs keep their history. WOs missing from the new file are kept and flagged
+ * (lastSeen stays old) unless `removeMissing`.
+ * Returns { rows, added, changed: [{ wo, plant, desc, from, to }], unchanged, missing, removed }.
+ */
+export function mergeBacklog(current, incoming, today, removeMissing = false, now = new Date()) {
+  const day = iso(today);
+  const seenAt = now.toISOString(); // exact upload time, so two uploads on one day stay distinguishable
+  const old = new Map((current?.rows || []).map((r) => [normWo(r.wo), r]));
+  const seen = new Set();
+  const rows = [];
+  const changed = [];
+  let added = 0, unchanged = 0;
+  for (const r of incoming) {
+    const key = normWo(r.wo);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const prev = old.get(key);
+    if (!prev) {
+      added++;
+      rows.push({ ...r, firstSeen: day, lastSeen: day, seenAt, statusSince: day, prevStatus: '' });
+    } else if (prev.status !== r.status) {
+      changed.push({ wo: r.wo, plant: r.plant, desc: r.desc, from: prev.status, to: r.status });
+      rows.push({ ...r, firstSeen: prev.firstSeen || day, lastSeen: day, seenAt, statusSince: day, changedAt: seenAt, prevStatus: prev.status });
+    } else {
+      unchanged++;
+      rows.push({ ...r, firstSeen: prev.firstSeen || day, lastSeen: day, seenAt, statusSince: prev.statusSince || day, changedAt: prev.changedAt || null, prevStatus: prev.prevStatus || '' });
+    }
+  }
+  const leftOut = [...old.entries()].filter(([k]) => !seen.has(k)).map(([, r]) => r);
+  if (!removeMissing) rows.push(...leftOut);
+  return { rows, added, changed, unchanged, missing: leftOut.length, removed: removeMissing ? leftOut.length : 0 };
+}
+
+/** Time of the most recent upload (rows with an older seenAt were not in that file). */
+export const latestSeen = (rows) => rows.reduce((m, r) => (r.seenAt && r.seenAt > m ? r.seenAt : m), '');
+/** Did the latest upload change this row's status? */
+export const changedIn = (r, latest) => !!(latest && r.changedAt === latest);

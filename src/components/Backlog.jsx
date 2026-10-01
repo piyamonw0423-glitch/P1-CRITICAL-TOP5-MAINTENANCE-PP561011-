@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { PLANT_IDS, PLANT_META } from '../lib/data.js';
 import { pd, thD } from '../lib/dates.js';
-import { STATUS_GROUPS, ageDays, groupOf, isClosedGroup, normWo, summarize } from '../lib/cmms.js';
+import { STATUS_GROUPS, ageDays, changedIn, groupOf, isClosedGroup, latestSeen, mergeBacklog, normWo, summarize } from '../lib/cmms.js';
 
 const PAGE = 50;
 const fmtDate = (s) => (s ? `${thD(pd(s))} ${String(pd(s).getFullYear() + 543).slice(2)}` : '–');
@@ -50,6 +50,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('age');
   const [limit, setLimit] = useState(PAGE);
+  const [flag, setFlag] = useState(''); // '' | 'changed' (status changed in the latest upload) | 'missing'
 
   useEffect(() => {
     if (!focus) return;
@@ -61,13 +62,18 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
   }, [focus]);
 
   const rows = backlog?.rows || [];
+  const latest = useMemo(() => latestSeen(rows), [rows]);
+  const isMissing = (r) => !!(latest && r.seenAt && r.seenAt < latest);
+  const isChanged = (r) => changedIn(r, latest);
   const scope = useMemo(() => rows.filter((r) => ids.includes(r.plant) && (plant === 'all' || r.plant === Number(plant))), [rows, ids, plant]);
   const summary = useMemo(() => summarize(scope), [scope]);
   const list = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const out = scope.filter((r) => {
       const g = groupOf(r.status).key;
-      if (groups.length ? !groups.includes(g) : !showClosed && isClosedGroup(g)) return false;
+      if (flag === 'changed' && !isChanged(r)) return false;
+      if (flag === 'missing' && !isMissing(r)) return false;
+      if (!flag && (groups.length ? !groups.includes(g) : !showClosed && isClosedGroup(g))) return false;
       const hay = `${r.wo} ${r.desc} ${r.location} ${r.asset} ${r.owner} ${r.nextApprove} ${r.status}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     }).map((r) => ({ ...r, age: ageDays(r, today) }));
@@ -77,7 +83,9 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
       wo: (a, b) => a.wo.localeCompare(b.wo),
     }[sort];
     return out.sort(by);
-  }, [scope, groups, showClosed, q, sort, today]);
+  }, [scope, groups, showClosed, q, sort, today, flag, latest]);
+  const changedCount = scope.filter(isChanged).length;
+  const missingCount = scope.filter(isMissing).length;
 
   if (!backlog) {
     return (
@@ -119,6 +127,8 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
               </select>
               <label className="backlog-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} disabled={groups.length > 0} /> รวมงานเสร็จ/ปิดแล้ว</label>
               {groups.length > 0 && <button type="button" className="linklike" onClick={() => setGroups([])}>ล้างตัวกรองสถานะ</button>}
+              {changedCount > 0 && <button type="button" className={`flag-btn${flag === 'changed' ? ' is-on' : ''}`} onClick={() => { setFlag((f) => (f === 'changed' ? '' : 'changed')); setLimit(PAGE); }}>สถานะเปลี่ยนรอบล่าสุด {changedCount}</button>}
+              {missingCount > 0 && <button type="button" className={`flag-btn is-missing${flag === 'missing' ? ' is-on' : ''}`} onClick={() => { setFlag((f) => (f === 'missing' ? '' : 'missing')); setLimit(PAGE); }}>ไม่อยู่ในไฟล์ล่าสุด {missingCount}</button>}
             </div>
             <div className="backlog-count">แสดง {Math.min(limit, list.length)} จาก {list.length} WO</div>
             <div className="backlog-table-wrap">
@@ -136,7 +146,11 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
                         <td className="mono">{r.wo}{r.parent && <div className="sub">ย่อยของ {r.parent}</div>}</td>
                         <td className="desc">{r.desc}<div className="sub">{[r.location, r.asset].filter(Boolean).join(' · ')}</div></td>
                         <td><span className="plant-dot" style={{ '--pc': PLANT_META[r.plant].color }}>{r.plant}</span></td>
-                        <td><GroupChip status={r.status} /></td>
+                        <td>
+                          <GroupChip status={r.status} />
+                          {r.prevStatus && <div className={`sub${isChanged(r) ? ' is-changed' : ''}`}>เดิม {r.prevStatus} · เปลี่ยน {fmtDate(r.statusSince)}</div>}
+                          {isMissing(r) && <div className="sub is-missing">ไม่อยู่ในไฟล์ล่าสุด (เห็นล่าสุด {fmtDate(r.lastSeen)})</div>}
+                        </td>
                         <td className="nowrap">{fmtDate(r.targetStart)}</td>
                         <td className={`num${r.age > 180 ? ' is-old' : ''}`}>{r.age ?? '–'}</td>
                         <td>{r.owner || '–'}{r.nextApprove && <div className="sub">รออนุมัติ: {r.nextApprove}</div>}</td>
@@ -163,39 +177,60 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
   );
 }
 
-/** Preview before replacing the backlog snapshot. */
-export function BacklogUploadDialog({ fileName, parsed, current, busy, onConfirm, onCancel }) {
+/** Preview of the merge: new WOs, status changes, unchanged and WOs no longer in the file. */
+export function BacklogUploadDialog({ fileName, parsed, current, today, busy, onConfirm, onCancel }) {
+  const [removeMissing, setRemoveMissing] = useState(false);
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onCancel(); };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onCancel]);
-  const before = new Set((current?.rows || []).map((r) => normWo(r.wo)));
-  const after = new Set(parsed.rows.map((r) => normWo(r.wo)));
-  const added = [...after].filter((w) => !before.has(w)).length;
-  const gone = [...before].filter((w) => !after.has(w)).length;
-  const perPlant = PLANT_IDS.map((p) => ({ p, s: summarize(parsed.rows.filter((r) => r.plant === p)) }));
+  const merge = useMemo(() => mergeBacklog(current, parsed.rows, today, removeMissing), [current, parsed, today, removeMissing]);
+  const perPlant = PLANT_IDS.map((p) => ({ p, s: summarize(merge.rows.filter((r) => r.plant === p)) }));
+  const fileDupes = parsed.duplicates || 0;
 
   return (
     <div className="overlay overlay-top" onClick={onCancel}>
       <div className="modal" role="dialog" aria-modal="true" aria-label="อัปโหลด WO Backlog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head" style={{ background: 'var(--navy)' }}><span className="modal-title">อัปโหลด WO Backlog จาก CMMS</span></div>
+        <div className="modal-head" style={{ background: 'var(--navy)' }}><span className="modal-title">อัปเดต WO Backlog จาก CMMS</span></div>
         <div className="modal-body-col import-body">
           <p className="import-file">{fileName}</p>
-          <div className="import-stats"><span><b>{parsed.rows.length}</b> WO ของโรง 5, 10, 6, 11</span>{current && <span>เทียบกับข้อมูลเดิม: ใหม่ <b>{added}</b> · หายไป (ปิด/ย้าย) <b>{gone}</b></span>}</div>
+          <div className="merge-stats">
+            <span className="is-new"><b>{merge.added}</b> WO ใหม่</span>
+            <span className="is-changed"><b>{merge.changed.length}</b> สถานะเปลี่ยน</span>
+            <span><b>{merge.unchanged}</b> ไม่เปลี่ยน</span>
+            {current && <span className="is-missing"><b>{merge.missing}</b> ไม่อยู่ในไฟล์นี้</span>}
+          </div>
+          {fileDupes > 0 && <p className="import-note">ไฟล์มีเลข WO ซ้ำ {fileDupes} แถว — นับครั้งเดียว (ใช้แถวแรก)</p>}
+          {merge.changed.length > 0 && (
+            <div className="import-errors merge-changes">
+              <div className="field-label">สถานะที่เปลี่ยน</div>
+              <ul>
+                {merge.changed.slice(0, 20).map((c) => <li key={c.wo}><b>{c.wo}</b> โรง {c.plant} · {c.from} → <b>{c.to}</b> <span className="sub">{c.desc}</span></li>)}
+                {merge.changed.length > 20 && <li>และอีก {merge.changed.length - 20} WO</li>}
+              </ul>
+            </div>
+          )}
+          {current && merge.missing > 0 && (
+            <label className="backlog-check">
+              <input type="checkbox" checked={removeMissing} onChange={(e) => setRemoveMissing(e.target.checked)} />
+              ลบ {merge.missing} WO ที่ไม่อยู่ในไฟล์นี้ออก (ถ้าไม่เลือก จะเก็บไว้พร้อมป้าย "ไม่อยู่ในไฟล์ล่าสุด")
+            </label>
+          )}
           <table className="upload-plants">
-            <thead><tr><th>โรง</th><th className="num">ทั้งหมด</th><th className="num">ค้าง</th><th className="num">เสร็จ/ปิด</th></tr></thead>
+            <thead><tr><th>หลังอัปเดต</th><th className="num">ทั้งหมด</th><th className="num">ค้าง</th><th className="num">เสร็จ/ปิด</th></tr></thead>
             <tbody>{perPlant.map(({ p, s }) => <tr key={p}><td>โรงไฟฟ้า {p}</td><td className="num">{s.total}</td><td className="num">{s.open}</td><td className="num">{s.total - s.open}</td></tr>)}</tbody>
           </table>
-          {parsed.skipped.length > 0 && <p className="import-note">ข้าม WO ของโรงอื่น: {parsed.skipped.map((s) => `${s.plant} (${s.count})`).join(', ')}</p>}
+          {parsed.skipped.length > 0 && <p className="import-note">ข้าม WO ของโรงอื่น: {parsed.skipped.map((x) => `${x.plant} (${x.count})`).join(', ')}</p>}
           {parsed.unknownStatuses.length > 0 && <p className="import-note is-bad">สถานะที่ยังไม่ได้จัดกลุ่ม (จะแสดงเป็น "อื่นๆ"): {parsed.unknownStatuses.join(', ')}</p>}
-          <div className="import-summary">ข้อมูล WO Backlog เดิมจะถูกแทนที่ทั้งชุด · งานใน Top 5 ไม่เปลี่ยน แต่จะแสดงสถานะ CMMS ล่าสุด</div>
         </div>
         <div className="modal-foot">
           <div />
           <div className="modal-foot-right">
             <button type="button" className="btn btn-ghost" onClick={onCancel}>ยกเลิก</button>
-            <button type="button" className="btn btn-save" disabled={busy || parsed.rows.length === 0} onClick={onConfirm}>{busy ? 'กำลังอัปโหลด…' : `อัปโหลด ${parsed.rows.length} WO`}</button>
+            <button type="button" className="btn btn-save" disabled={busy || merge.rows.length === 0} onClick={() => onConfirm(merge)}>
+              {busy ? 'กำลังอัปเดต…' : current ? `อัปเดต (ใหม่ ${merge.added} · เปลี่ยน ${merge.changed.length})` : `อัปโหลด ${merge.rows.length} WO`}
+            </button>
           </div>
         </div>
       </div>

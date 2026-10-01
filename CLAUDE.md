@@ -21,7 +21,9 @@ Full system doc, work log and roadmap: `docs/SYSTEM.md` (Thai). User-facing guid
 
 ## Conventions
 - WO Backlog: CMMS "List of Work Orders" export parsed in the browser (`src/lib/cmms.js`), stored as one snapshot doc `backlog/current`,
-  shown in `components/Backlog.jsx`; Top 5 jobs link to it by WO number. Status groups are the team's (see docs/SYSTEM.md §8.1).
+  shown in `components/Backlog.jsx`; Top 5 jobs link to it by WO number. Uploads merge by WO (`mergeBacklog`: new + changed
+  status, keeps prevStatus/statusSince/changedAt/seenAt; missing WOs kept and flagged unless removed).
+- One Top 5 job per WO number (form, stores, server `duplicate_wo`); "ลบงานซ้ำ" uses `findDuplicates` in `src/lib/dedupe.js`. Status groups are the team's (see docs/SYSTEM.md §8.1).
 - No `EDIT_PASSWORD` (and no Access editor list) → API is view-only (`setup: 'no_password'`) unless `ALLOW_OPEN_EDIT=true`.
 - Max 5 jobs per plant (`MAX_JOBS_PER_PLANT` in `src/lib/data.js`), enforced in UI, all stores, server (`plant_full`) and Excel import.
 - Dates are `YYYY-MM-DD` strings; "today" is Thai time (UTC+7). Job buckets: done / stuck (pending or overdue) / doing.

@@ -14,6 +14,8 @@ import { buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
 import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
 import { jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
+import { findDuplicates } from './lib/dedupe.js';
+import DuplicatesDialog from './components/Duplicates.jsx';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -30,6 +32,7 @@ const ERROR_TEXT = {
   wrong_key: 'รหัสผ่านทีมไม่ถูกต้องหรือถูกเปลี่ยนแล้ว กดอัปเดตงานประจำวันแล้วใส่รหัสใหม่',
   read_only: 'บัญชีนี้ดูได้อย่างเดียว ขอสิทธิ์แก้ไขจากผู้ดูแลแดชบอร์ด',
   no_password: 'ผู้ดูแลยังไม่ได้ตั้งรหัสทีม (EDIT_PASSWORD) เว็บจึงเป็นแบบดูอย่างเดียว',
+  duplicate_wo: 'เลข WO นี้มีอยู่แล้วใน Top 5 — แก้งานเดิมแทนการเพิ่มซ้ำ',
   plant_full: `โรงนี้มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือแก้งานเดิมแทนการเพิ่มใหม่`,
 };
 const errorText = (e) => ERROR_TEXT[e?.code] || `บันทึกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่${e?.detail ? ` (${e.detail})` : ''}`;
@@ -50,6 +53,7 @@ export default function App() {
   const [excel, setExcel] = useState(null); // { fileName, parsed } while previewing an Excel import
   const [backlogUp, setBacklogUp] = useState(null); // { fileName, parsed } while previewing a CMMS upload
   const [backlogFocus, setBacklogFocus] = useState(null); // { plant, n } to open the WO list on one plant
+  const [dedupe, setDedupe] = useState(null); // duplicate groups while the remove-duplicates dialog is open
   const [flashId, setFlashId] = useState(null);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -89,6 +93,7 @@ export default function App() {
   const tKey = iso(t);
   // Recompute when the calendar day rolls over (t is derived from tKey).
   const view = useMemo(() => dashboardView(data, filter, t, store.backlog), [data, filter, tKey, store.backlog]);
+  const dupeGroups = useMemo(() => findDuplicates(data.jobs), [data.jobs]);
   const trackedWos = useMemo(() => new Set(data.jobs.filter((j) => j.wo).map((j) => normWo(j.wo))), [data.jobs]);
 
   // Run a store write; close dialogs and toast on success, keep the form open on failure.
@@ -250,7 +255,8 @@ export default function App() {
           else setEditMode((v) => !v);
         }}
       />
-      {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onUploadBacklog={uploadBacklogFile} onReset={resetData} />}
+      {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onUploadBacklog={uploadBacklogFile} onReset={resetData}
+        dupeCount={dupeGroups.reduce((n, g) => n + g.remove.length, 0)} onDedupe={() => setDedupe(dupeGroups)} />}
 
       <main className="main">
         {status === 'connecting' && (
@@ -363,11 +369,27 @@ export default function App() {
         <BacklogUploadDialog
           {...backlogUp}
           current={store.backlog}
+          today={t}
           busy={busy}
           onCancel={() => setBacklogUp(null)}
-          onConfirm={async () => {
-            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: backlogUp.parsed.rows }), `อัปโหลด WO Backlog แล้ว · ${backlogUp.parsed.rows.length} WO`);
+          onConfirm={async (merge) => {
+            const msg = store.backlog
+              ? `อัปเดต WO Backlog แล้ว · ใหม่ ${merge.added} · สถานะเปลี่ยน ${merge.changed.length}${merge.removed ? ` · ลบ ${merge.removed}` : ''}`
+              : `อัปโหลด WO Backlog แล้ว · ${merge.rows.length} WO`;
+            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows }), msg);
             setBacklogUp(null);
+          }}
+        />
+      )}
+      {dedupe && (
+        <DuplicatesDialog
+          groups={dedupe}
+          busy={busy}
+          onCancel={() => setDedupe(null)}
+          onConfirm={async () => {
+            const ids = dedupe.flatMap((g) => g.remove.map((j) => j.id));
+            await run(() => store.deleteJobs(ids), `ลบงานซ้ำแล้ว ${ids.length} งาน`);
+            setDedupe(null);
           }}
         />
       )}

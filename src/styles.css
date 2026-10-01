@@ -353,3 +353,23 @@ a { color: oklch(0.5 0.17 255); }
 .upload-plants th, .upload-plants td { padding: 4px 14px 4px 0; text-align: left; }
 .upload-plants .num { text-align: right; font-variant-numeric: tabular-nums; }
 .import-note { margin: 0; font-size: 13px; color: var(--ink-2); }
+
+/* ---------- Backlog merge & duplicates ---------- */
+.merge-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.merge-stats span { padding: 4px 12px; border-radius: 999px; background: var(--hover); font-size: 13.5px; }
+.merge-stats .is-new { background: oklch(0.94 0.05 150); }
+.merge-stats .is-changed { background: oklch(0.95 0.07 85); }
+.merge-stats .is-missing { background: oklch(0.95 0.03 25); }
+.merge-changes .sub { color: var(--muted); font-size: 12px; }
+.backlog-table .sub.is-changed { color: oklch(0.5 0.13 70); font-weight: 700; }
+.backlog-table .sub.is-missing { color: var(--stuck-ink); font-weight: 700; }
+.flag-btn { border: 1.5px solid oklch(0.8 0.12 85); background: white; color: oklch(0.45 0.1 65); border-radius: 999px; padding: 5px 12px; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.flag-btn.is-missing { border-color: oklch(0.8 0.08 25); color: var(--stuck-ink); }
+.flag-btn.is-on { background: oklch(0.95 0.07 85); }
+.flag-btn.is-missing.is-on { background: oklch(0.95 0.04 25); }
+.dupe-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; }
+.dupe-list li { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; line-height: 1.5; }
+.dupe-title { font-weight: 700; }
+.dupe-keep { color: var(--done-ink); font-weight: 600; }
+.dupe-remove { color: var(--stuck-ink); }
+.pill-btn .count { margin-left: 4px; background: var(--stuck); color: white; border-radius: 999px; padding: 0 7px; font-size: 11.5px; }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
 import { iso, today0 } from './dates.js';
+import { sameWo } from './dedupe.js';
 
 /*
  * Data layer. Two backends behind one hook:
@@ -46,6 +47,7 @@ const stripPhotos = ({ photos, ...job }) => job; // eslint-disable-line no-unuse
 
 // Adding a job to a plant (new, or moved from another plant) must not exceed the per-plant limit.
 const assertRoom = (jobs, job) => {
+  if (sameWo(jobs, job)) throw new StoreError('duplicate_wo');
   const prev = jobs.find((j) => j.id === job.id);
   if (prev?.plant === job.plant) return;
   if (jobs.filter((j) => j.plant === job.plant && j.id !== job.id).length >= MAX_JOBS_PER_PLANT) throw new StoreError('plant_full');
@@ -155,7 +157,7 @@ function useApiStore() {
     if (!r.ok) {
       const b = await r.json().catch(() => ({}));
       const code = String(b.error || '').startsWith('plant_full') ? 'plant_full'
-        : b.error === 'no_password' ? 'no_password'
+        : b.error === 'no_password' || b.error === 'duplicate_wo' ? b.error
           : { 400: 'bad_request', 403: 'read_only', 413: 'quota_exceeded' }[r.status] || 'unavailable';
       throw new StoreError(code, b.error, b.detail || b.error || `HTTP ${r.status}`);
     }
@@ -185,6 +187,14 @@ function useApiStore() {
     unavailableText: `เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ หากยังไม่ได้ ให้แจ้งผู้ดูแลแดชบอร์ดพร้อมรหัสปัญหา${problem ? ` · รหัสปัญหา: ${problem}` : ''}`,
     saveJob: (job) => send('PUT', `api/jobs/${encodeURIComponent(job.id)}`, job),
     deleteJob: (id) => send('DELETE', `api/jobs/${encodeURIComponent(id)}`),
+    deleteJobs: async (ids) => {
+      for (const id of ids) {
+        const r = await request('DELETE', `api/jobs/${encodeURIComponent(id)}`);
+        if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
+        if (!r.ok) throw new StoreError(r.status === 403 ? 'read_only' : 'unavailable');
+      }
+      await load().catch(() => {});
+    },
     saveImpact: (pid, impact) => send('PUT', `api/plants/${pid}`, { impact }),
     importData: (d) => send('POST', 'api/import', d),
     resetSample: null,
@@ -222,6 +232,7 @@ function useLocalStore() {
       commit({ ...data, jobs: exists ? data.jobs.map((j) => (j.id === job.id ? job : j)) : data.jobs.concat([job]) });
     },
     deleteJob: async (id) => commit({ ...data, jobs: data.jobs.filter((j) => j.id !== id) }),
+    deleteJobs: async (ids) => commit({ ...data, jobs: data.jobs.filter((j) => !ids.includes(j.id)) }),
     saveImpact: async (pid, impact) => commit({ ...data, plants: { ...data.plants, [pid]: { ...data.plants[pid], impact } } }),
     // Upsert by id (d.replace: only d.jobs remain). Jobs without `photos` keep their current photos.
     importData: async (d) => {
@@ -378,6 +389,13 @@ function useSharedStore() {
 
   return {
     status, shared: true, canWrite, data, whoUpdated, saveJob, deleteJob, saveImpact, importData, resetSample: null,
+    deleteJobs: (ids) => guard(async (db) => {
+      for (const id of ids) {
+        for (const ph of partsRef.current.photos.filter((p) => p.jobId === id)) await call(() => db.doc(`photos/${ph.id}`).delete());
+        await call(() => db.doc(`jobs/${id}`).delete());
+      }
+      await stamp(db, (partsRef.current.jobs || []).filter((j) => !ids.includes(j.id)));
+    }),
     backlog: parts.backlog || null,
     // One document (≤ 256 KiB in the artifact store), replaced on every upload.
     uploadBacklog: ({ fileName, rows }) => guard(async (db) => {

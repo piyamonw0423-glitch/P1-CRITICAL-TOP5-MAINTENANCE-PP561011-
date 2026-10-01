@@ -35,7 +35,7 @@ export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly,
   );
 }
 
-export function EditBar({ shared, onExportExcel, onExport, onImportFile, onUploadBacklog, onReset }) {
+export function EditBar({ shared, dupeCount = 0, onExportExcel, onExport, onImportFile, onUploadBacklog, onDedupe, onReset }) {
   const fileRef = useRef(null);
   const backlogRef = useRef(null);
   return (
@@ -57,6 +57,7 @@ export function EditBar({ shared, onExportExcel, onExport, onImportFile, onUploa
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onUploadBacklog(f); }}
         />
         <button type="button" className="pill-btn" onClick={onExport} title="รวมรูปหน้างาน ใช้กู้คืนข้อมูลทั้งหมด"><span className="ico"><Icon name="download" /></span>{shared ? 'สำรองข้อมูล (.json)' : 'ส่งออกไฟล์ (แชร์ทีม)'}</button>
+        <button type="button" className="pill-btn" onClick={onDedupe} title="รวมงาน Top 5 ที่เลข WO ซ้ำกันให้เหลืองานเดียว">ลบงานซ้ำ{dupeCount > 0 && <span className="count">{dupeCount}</span>}</button>
         {onReset && <button type="button" className="pill-btn is-danger" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button>}
         <input
           ref={fileRef}

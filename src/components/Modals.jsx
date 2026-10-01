@@ -3,6 +3,7 @@ import Icon from '../lib/icons.jsx';
 import { MAX_JOBS_PER_PLANT, PLANT_META } from '../lib/data.js';
 import { iso, pd, thD, today0 } from '../lib/dates.js';
 import { shrinkImage } from '../lib/photos.js';
+import { sameWo } from '../lib/dedupe.js';
 
 const MAX_PHOTOS = 4;
 const MAX_PHOTO_CHARS = 200000;
@@ -68,6 +69,7 @@ export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }
   const [d, setD] = useState(() => ({ photos: [], ...initial, plant: String(initial.plant) }));
   const [err, setErr] = useState('');
   const [plantErr, setPlantErr] = useState('');
+  const [woErr, setWoErr] = useState('');
 
   const set = (k) => (e) => {
     const v = e.target.value;
@@ -105,6 +107,8 @@ export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }
 
   const save = () => {
     if (!d.issue.trim()) { setErr('กรุณากรอกปัญหาเครื่องจักรก่อนบันทึก'); return; }
+    const dupe = sameWo(jobs, { ...d, id: d.id || null });
+    if (dupe) { setWoErr(`เลข WO นี้มีอยู่แล้วใน Top 5 (${dupe.issue}) — แก้งานเดิมแทนการเพิ่มซ้ำ`); return; }
     if (+d.plant !== initial.plant || !d.id) {
       const inPlant = jobs.filter((j) => j.plant === +d.plant && j.id !== d.id).length;
       if (inPlant >= MAX_JOBS_PER_PLANT) { setPlantErr(`โรงไฟฟ้า ${d.plant} มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว`); return; }
@@ -127,7 +131,8 @@ export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }
           <input className="field" type="number" min="1" value={d.rank} onChange={set('rank')} />
         </Field>
         <Field label="เลข WO (Work Order)">
-          <input className="field" value={d.wo || ''} onChange={set('wo')} placeholder="เช่น WO-P5-001" />
+          <input className={`field${woErr ? ' is-invalid' : ''}`} value={d.wo || ''} onChange={(e) => { setWoErr(''); set('wo')(e); }} placeholder="เช่น WO-P5-001" />
+          {woErr && <span className="field-error">{woErr}</span>}
         </Field>
         <Field label="1. ปัญหาเครื่องจักร" wide>
           <input className={`field${err ? ' is-invalid' : ''}`} value={d.issue} onChange={(e) => { setErr(''); set('issue')(e); }} placeholder="เช่น Boiler Feed Pump B สั่นสูง" autoFocus={!d.id} aria-invalid={!!err} />

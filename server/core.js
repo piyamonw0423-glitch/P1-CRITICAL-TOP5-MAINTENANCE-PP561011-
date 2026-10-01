@@ -24,12 +24,18 @@ const bad = (msg) => Object.assign(new Error(msg), { status: 400, expose: true }
 // WO Backlog snapshot from the CMMS export (one document, replaced on each upload).
 const MAX_BACKLOG = 5000;
 const WO_RE = /^[\w\-./]{1,40}$/;
-const BACKLOG_TEXT = { desc: 300, location: 80, asset: 80, parent: 40, workType: 20, nextApprove: 80, owner: 80, status: 30 };
-const BACKLOG_DATES = ['targetStart', 'targetFinish', 'schedStart', 'schedFinish', 'actualStart', 'actualFinish'];
+const BACKLOG_TEXT = { desc: 300, location: 80, asset: 80, parent: 40, workType: 20, nextApprove: 80, owner: 80, status: 30, prevStatus: 30 };
+const BACKLOG_DATES = ['targetStart', 'targetFinish', 'schedStart', 'schedFinish', 'actualStart', 'actualFinish', 'firstSeen', 'lastSeen', 'statusSince'];
 function cleanBacklog(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw bad('backlog file has no work orders');
   if (rows.length > MAX_BACKLOG) throw bad(`backlog is limited to ${MAX_BACKLOG} work orders`);
-  return rows.map((r) => {
+  const seen = new Set();
+  return rows.filter((r) => { // one row per WO number
+    const k = String(r?.wo ?? '').replace(/\s+/g, '').toUpperCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).map((r) => {
     const wo = String(r?.wo ?? '').trim();
     if (!WO_RE.test(wo)) throw bad(`invalid work order "${wo.slice(0, 40)}"`);
     const plant = Number(r.plant);
@@ -37,6 +43,7 @@ function cleanBacklog(rows) {
     const out = { wo, plant, value: Math.max(0, Number(r.value) || 0) };
     for (const [f, max] of Object.entries(BACKLOG_TEXT)) out[f] = String(r[f] ?? '').slice(0, max);
     for (const f of BACKLOG_DATES) out[f] = DATE_RE.test(r[f]) ? r[f] : null;
+    for (const f of ['seenAt', 'changedAt']) out[f] = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(r[f]) ? r[f] : null;
     return out;
   });
 }
@@ -205,6 +212,13 @@ export function createDb(conn) {
       const { job, photos } = cleanJob(id, body);
       return tx(async (c) => {
         const prev = await c.query("SELECT (data->>'plant')::int AS plant FROM docs WHERE collection = 'jobs' AND id = $1", [job.id]);
+        if (job.wo.trim()) { // one Top 5 job per WO number
+          const dup = await c.query(
+            "SELECT 1 FROM docs WHERE collection = 'jobs' AND id <> $1 AND upper(regexp_replace(data->>'wo', '\\s', '', 'g')) = $2",
+            [job.id, job.wo.replace(/\s+/g, '').toUpperCase()],
+          );
+          if (dup.rowCount) throw bad('duplicate_wo');
+        }
         await writeJob(c, job, photos);
         // Only adding a job to a plant (new, or moved from another plant) can exceed the limit.
         if (prev.rows[0]?.plant !== job.plant) await checkLimit(c, [job.plant]);
