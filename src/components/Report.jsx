@@ -250,11 +250,12 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
         <span className="rep-rounds">{cur.baseline && <b className="rep-base">Baseline</b>} อัปโหลด {cur.rounds.length} รอบ: {cur.rounds.map((r) => hm(r.at)).join(', ')} น.</span>
       </div>
 
+      <p className="rep-note">นับตาม<b>เวลาที่ระบบเห็นการเปลี่ยนแปลงในไฟล์ CMMS</b> (เทียบไฟล์รอบก่อน) — เช่น งานที่เพิ่งกดปิดวันนี้นับเป็น CLOSED วันนี้ แม้ Actual Finish จะเป็นวันก่อน · ผลงานตามวันที่ทำงานจริงดูที่ "ผลงาน P1 สะสม" ด้านบน</p>
       <div className="rep-tiles">
         <Tile label="เปิดงาน (WO ใหม่)" value={tot.new} sub={tot.inserted ? `⚡ แทรกระหว่างวัน ${tot.inserted}` : undefined} tone={tot.inserted ? 'insert' : ''} />
         <Tile label="เริ่มงาน (Start)" value={tot.started} tone="start" />
         <Tile label="เสร็จ / รอปิด" value={tot.finished} />
-        <Tile label="CLOSED" value={tot.closed} tone="close" sub={tot.assumed ? `Status ${tot.closedStatus} · ไม่พบในไฟล์ ${tot.assumed}` : cur.baseline && !tot.closed ? 'วันเริ่มต้น' : undefined} />
+        <Tile label="CLOSED (พบในไฟล์วันนี้)" value={tot.closed} tone="close" sub={tot.assumed ? `Status ${tot.closedStatus} · ไม่พบในไฟล์ ${tot.assumed}` : cur.baseline && !tot.closed ? 'วันเริ่มต้น' : undefined} />
         <Tile label="คงค้าง" value={tot.open} sub={openDelta != null ? `${signed(openDelta)} จาก ${dayLabel(prev.date)}` : 'วันแรกที่บันทึก'} tone={openDelta > 0 ? 'up' : openDelta < 0 ? 'down' : ''} />
         <Tile label="ค้างเกิน 30 วัน" value={tot.a90 + tot.aMore} sub={`เกิน 90 วัน ${tot.aMore}`} />
       </div>

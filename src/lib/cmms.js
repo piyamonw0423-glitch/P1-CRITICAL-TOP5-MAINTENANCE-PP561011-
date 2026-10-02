@@ -346,6 +346,18 @@ export const dateFromFileName = (name) => {
 
 /* ---------------- work-order history (yearly base data + daily updates) ---------------- */
 
+/** Latest date found in rows (Actual Start/Finish, Target Start) — how current a file or the history is. */
+export const latestDateIn = (rows) => rows.reduce((m, r) => {
+  for (const d of [r.as, r.af, r.ts, r.actualStart, r.actualFinish, r.targetStart]) if (d && d > m) m = d;
+  return m;
+}, '');
+
+/**
+ * As-of date of a daily CMMS file: the date in its file name (e.g. "_2.10.26"), else the latest date inside it.
+ * The history is only updated from files at least as recent as the history itself (no going back in time).
+ */
+export const fileAsOf = (fileName, rows) => dateFromFileName(fileName) || latestDateIn(rows) || null;
+
 /**
  * Compact history rows from a parsed CMMS export of every P1 WO of the year (all statuses, CLOSE included):
  * { wo, plant, team, status, as: Actual Start, af: Actual Finish, ts: Target Start, desc }.

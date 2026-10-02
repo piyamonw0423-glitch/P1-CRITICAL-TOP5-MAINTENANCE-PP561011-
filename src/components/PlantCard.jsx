@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { DONE, DOING, MAX_JOBS_PER_PLANT, STUCK } from '../lib/data.js';
-import { GroupSummary } from './Backlog.jsx';
+import { GroupChip, GroupSummary } from './Backlog.jsx';
+import { pd, thD } from '../lib/dates.js';
 
 const R = 40;
 const C = 2 * Math.PI * R;
@@ -105,7 +106,34 @@ function JobRow({ row, edit, flash, checked, onCheck, onEdit, onPhoto, onMove, d
   );
 }
 
-export default function PlantCard({ p, edit, flashId, selected, onSelect, onEditJob, onAddJob, onReorder, onEditImpact, onPhoto, onOpenBacklog }) {
+const fmtD = (s) => (s ? thD(pd(s)) : '–');
+
+// One CMMS work order started today (daily tab): tap to see the details, in edit mode add it to the list.
+function CmmsTodayRow({ r, edit, onTrack }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`cmms-today${open ? ' is-open' : ''}`}>
+      <button type="button" className="cmms-today-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="cmms-today-wo">{r.wo}</span>
+        <span className="cmms-today-desc">{r.desc || '—'}</span>
+        <GroupChip status={r.status} small />
+      </button>
+      {open && (
+        <div className="cmms-today-body">
+          <div><b>รายละเอียด:</b> {r.desc || '—'}</div>
+          <div><b>ทีม:</b> {r.team && r.team !== 'OTHER' ? r.team : 'ไม่ระบุ'}{r.supervisor ? ` · Supervisor ${r.supervisor}` : ''}{r.owner ? ` · ${r.owner}` : ''}</div>
+          <div><b>สถานที่/อุปกรณ์:</b> {[r.location, r.asset].filter(Boolean).join(' · ') || '—'}</div>
+          <div><b>Actual Start:</b> {fmtD(r.actualStart)} · <b>Target:</b> {fmtD(r.targetStart)} – {fmtD(r.targetFinish)}{r.nextApprove ? ` · รออนุมัติ ${r.nextApprove}` : ''}</div>
+          {edit && (r.tracked
+            ? <span className="tracked-tag">⭐ อยู่ในรายการแล้ว</span>
+            : <button type="button" className="track-btn" onClick={() => onTrack(r)}>＋ เพิ่มเข้ารายการงานประจำวัน</button>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PlantCard({ p, edit, flashId, selected, onSelect, onEditJob, onAddJob, onReorder, onEditImpact, onPhoto, onOpenBacklog, onTrackDaily }) {
   // Two ranked lists per plant (machine risk / daily work), one shown at a time.
   const [tab, setTab] = useState(p.lists[0].k);
   // Unfinished top 5 always shown; extra and finished jobs fold behind a chevron (opened for a just-saved job).
@@ -216,6 +244,7 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
             onClick={() => { setTab(l.k); setExpanded(false); }}
           >
             {l.tab}<span className="list-tab-n">{l.total}</span>
+            {l.k === 'daily' && p.cmmsToday.length > 0 && <span className="list-tab-cmms" title="WO ใน CMMS ที่ Actual Start วันนี้">+{p.cmmsToday.length} CMMS</span>}
           </button>
         ))}
       </div>
@@ -241,9 +270,19 @@ export default function PlantCard({ p, edit, flashId, selected, onSelect, onEdit
       </div>
 
       <div className="jobs">
+        {L.k === 'daily' && (
+          <div className="cmms-today-box">
+            <div className="cmms-today-title">งานที่เริ่มวันนี้จาก CMMS (Actual Start {fmtD(p.today)}) · {p.cmmsToday.length} WO</div>
+            {p.cmmsToday.length === 0
+              ? <div className="muted cmms-today-empty">วันนี้ยังไม่มี WO ที่มี Actual Start ในไฟล์ CMMS ล่าสุด{edit ? ' · เพิ่มงานเองได้ที่ปุ่ม "เพิ่มงาน"' : ''}</div>
+              : p.cmmsToday.map((r) => <CmmsTodayRow key={r.wo} r={r} edit={edit} onTrack={onTrackDaily} />)}
+          </div>
+        )}
         {L.top.length === 0 && (
           <div className="jobs-empty">
-            {L.total === 0
+            {L.total === 0 && L.k === 'daily'
+              ? <>ยังไม่มีงานที่ทีมเพิ่มเอง</>
+              : L.total === 0
               ? <>ยังไม่มีงานใน Top 5 {L.tab}{p.wo ? <> · เลือกจาก <button type="button" className="linklike" onClick={() => onOpenBacklog(p.id)}>WO Backlog</button> (กด ☆ ติดตาม ในโหมดแก้ไข)</> : ''}</>
               : 'ไม่มีงานค้าง 🎉'}
           </div>

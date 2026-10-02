@@ -1,6 +1,6 @@
 import { BLOCK, DONE, DOING, FILTERS, GROUPS, LISTS, PLANT_IDS, PLANT_META, STATUS, STUCK, TOP_N, bucket, counts, listOf } from './data.js';
 import { daysBetween, iso, pd, range, thD } from './dates.js';
-import { effGroup, isClosedGroup, kpiBucket, latestSeen, normWo, summarize } from './cmms.js';
+import { effGroup, isClosedGroup, kpiBucket, latestSeen, normWo, presentIn, summarize } from './cmms.js';
 
 const pctOf = (n, total) => Math.round((n / (total || 1)) * 100);
 
@@ -73,6 +73,14 @@ export function plantView(data, pid, t, backlog = null) {
     impact: data.plants[pid]?.impact || [],
     lists,
     jobIds: all.map((j) => j.id),
+    today: iso(t),
+    // CMMS work orders of this plant whose Actual Start is today (shown in the daily tab without typing them in).
+    cmmsToday: backlog
+      ? backlog.rows
+        .filter((r) => r.plant === pid && r.actualStart === iso(t) && presentIn(r, latest))
+        .map((r) => ({ ...r, tracked: all.some((j) => j.wo && normWo(j.wo) === normWo(r.wo)) }))
+        .sort((a, b) => a.wo.localeCompare(b.wo))
+      : [],
     wo: woRows ? summarize(woRows, latest) : null,
   };
 }

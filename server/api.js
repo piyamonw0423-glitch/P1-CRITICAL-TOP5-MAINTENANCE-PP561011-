@@ -91,7 +91,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
         }
       }
       if (method === 'PUT' && path === '/api/backlog') {
-        await db.saveBacklog(body, by);
+        const saved = await db.saveBacklog(body, by);
         // Summary to LINE after each upload (not for a baseline); a LINE failure never fails the upload itself.
         let line = 'off';
         if (lineConfigured(env) && !body?.baseline) {
@@ -103,7 +103,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
             line = 'failed';
           }
         }
-        return ok({ ok: true, line });
+        return ok({ ok: true, line, hist: saved?.hist || 'none' });
       }
     }
     return fail(404, 'not_found');

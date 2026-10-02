@@ -208,11 +208,11 @@ function useApiStore() {
     stats,
     wohist,
     // Sent in parts so no single request makes the Worker handle the whole year at once.
-    uploadHistory: async ({ fileName, rows }) => {
+    uploadHistory: async ({ fileName, rows, asOf }) => {
       const PART = 500;
       for (let i = 0, part = 0; i < rows.length; i += PART, part++) {
         const last = i + PART >= rows.length;
-        const r = await request('PUT', 'api/wohist', { fileName, rows: rows.slice(i, i + PART), part, last });
+        const r = await request('PUT', 'api/wohist', { fileName, asOf, rows: rows.slice(i, i + PART), part, last });
         if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
         if (!r.ok) {
           const b = await r.json().catch(() => ({}));
@@ -275,12 +275,12 @@ function useLocalStore() {
     backlog,
     stats,
     wohist,
-    uploadHistory: async ({ fileName, rows }) => {
-      const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
+    uploadHistory: async ({ fileName, rows, asOf }) => {
+      const doc = { uploadedAt: new Date().toISOString(), fileName, asOf: asOf || null, rows };
       try { localStorage.setItem(HIST_KEY, JSON.stringify(doc)); } catch { throw new StoreError('quota_exceeded'); }
       setWohist(doc);
     },
-    uploadBacklog: async ({ fileName, rows, baseline }) => {
+    uploadBacklog: async ({ fileName, rows, baseline, fileDate }) => {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
       // A baseline restarts the report from this file; otherwise fold the upload into today's stats.
       const nextStats = baseline
@@ -289,7 +289,9 @@ function useLocalStore() {
           const day = statsAfterUpload(backlog?.rows, rows, stats.find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
           return stats.filter((x) => x.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date)).slice(-120);
         })();
-      const nextHist = wohist ? { ...wohist, rows: applyDailyToHist(wohist.rows, rows, iso(today0())).rows, syncedAt: doc.uploadedAt } : null;
+      // Same guard as the server: a daily file older than the history does not update it.
+      const histOk = wohist && !(fileDate && wohist.asOf && fileDate < wohist.asOf);
+      const nextHist = histOk ? { ...wohist, rows: applyDailyToHist(wohist.rows, rows, iso(today0())).rows, syncedAt: doc.uploadedAt, asOf: [wohist.asOf || '', fileDate || ''].sort().at(-1) || null } : null;
       try {
         localStorage.setItem(BACKLOG_KEY, JSON.stringify(doc));
         localStorage.setItem(STATS_KEY, JSON.stringify(nextStats));
@@ -298,6 +300,7 @@ function useLocalStore() {
       setBacklog(doc);
       setStats(nextStats);
       if (nextHist) setWohist(nextHist);
+      return { hist: !wohist ? 'none' : histOk ? 'synced' : 'skipped' };
     },
     whoUpdated: '',
     saveJob: async (job) => {

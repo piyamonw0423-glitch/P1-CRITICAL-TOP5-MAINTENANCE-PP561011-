@@ -480,3 +480,16 @@ a { color: oklch(0.5 0.17 255); }
 .rep-table tr.rep-total th, .rep-table tr.rep-total td { border-top: 2px solid var(--line); font-weight: 700; }
 .hist .rep-tiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .rep-tile.is-material .rep-tile-sub { color: oklch(0.5 0.16 45); font-weight: 700; }
+/* ---------- Daily tab: today's CMMS work orders ---------- */
+.list-tab-cmms { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 999px; background: oklch(0.9 0.08 150); color: oklch(0.35 0.1 150); }
+.list-tab.is-on .list-tab-cmms { background: oklch(1 0 0 / 0.85); }
+.cmms-today-box { margin: 8px 14px; padding: 8px 10px; border-radius: 12px; background: oklch(0.97 0.02 150); display: flex; flex-direction: column; gap: 4px; }
+.cmms-today-title { font-size: 12.5px; font-weight: 700; color: oklch(0.35 0.1 150); }
+.cmms-today-empty { font-size: 12.5px; }
+.cmms-today { background: white; border-radius: 10px; border: 1px solid var(--line); }
+.cmms-today-head { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; font-size: 13px; }
+.cmms-today-wo { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cmms-today-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.cmms-today.is-open .cmms-today-desc { white-space: normal; }
+.cmms-today-body { padding: 0 10px 8px; font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
+.rep-note { margin: 8px 18px 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }

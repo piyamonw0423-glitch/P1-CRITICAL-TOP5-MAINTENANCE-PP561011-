@@ -97,9 +97,10 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
         <span className="rep-rounds">ฐานข้อมูล {rows.length.toLocaleString()} WO · อัปเดต {new Date(synced).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} {new Date(synced).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</span>
       </div>
 
+      <p className="rep-note">นับตาม<b>วันที่ทำงานจริง</b> (Actual Start / Actual Finish) — งานที่เพิ่งกดปิดในระบบวันนี้แต่ Actual Finish เป็นวันก่อนหน้า จะนับไว้ที่วันนั้น · ความเปลี่ยนแปลงที่เห็นในไฟล์แต่ละรอบดูที่ "รายงานประจำวัน" ด้านล่าง</p>
       <div className="rep-tiles">
-        <Tile label="เปิดงาน (Actual Start)" value={tot.opened.toLocaleString()} tone="start" sub={`${dLabel(range[0])} – ${dLabel(range[1])}`} />
-        <Tile label="ปิดงาน (CLOSE)" value={tot.closed.toLocaleString()} tone="close" sub={tot.opened ? `${pct(tot.closed, tot.opened)}% ของงานที่เปิด` : undefined} />
+        <Tile label="เปิดงาน (ตามวัน Actual Start)" value={tot.opened.toLocaleString()} tone="start" sub={`${dLabel(range[0])} – ${dLabel(range[1])}`} />
+        <Tile label="ปิดงาน (ตามวัน Actual Finish)" value={tot.closed.toLocaleString()} tone="close" sub={tot.opened ? `${pct(tot.closed, tot.opened)}% ของงานที่เปิด` : undefined} />
         <Tile label="คงค้าง (เริ่มแล้วยังไม่ปิด)" value={tot.backlogEnd.toLocaleString()} sub={`ณ ${dLabel(range[1])}`} />
         <Tile label="กำลังทำ" value={tot.inProgress} sub="ตอนนี้ · INPRG/REWORK" />
         <Tile label="เสร็จรอปิด" value={tot.finishWait} sub="ตอนนี้ · FINISH/COMP/WACCEPT" />

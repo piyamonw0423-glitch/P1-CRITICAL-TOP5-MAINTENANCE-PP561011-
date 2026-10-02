@@ -169,7 +169,11 @@ export function createDb(conn) {
   // Same rules as applyDailyToHist (cmms.js), run inside Postgres so the Worker never parses the ~0.5 MB
   // history (Workers Free allows ~10 ms CPU per request): open WOs take the file's status and dates,
   // new WOs are added, open WOs missing from the file close today (est), closed WOs stay closed.
-  const syncHist = async (c, rows, day) => {
+  // Returns 'none' (no history), 'skipped' (file older than the history) or 'synced'.
+  const syncHist = async (c, rows, day, fileDate) => {
+    const meta = (await c.query("SELECT data->>'asOf' AS as_of FROM docs WHERE collection = 'wohist' AND id = 'current'")).rows[0];
+    if (!meta) return 'none';
+    if (fileDate && meta.as_of && fileDate < meta.as_of) return 'skipped';
     const latest = latestSeen(rows);
     const daily = rows.filter((r) => presentIn(r, latest)).map((r) => ({
       wo: r.wo, plant: r.plant, wl: r.workLoc || '', team: r.team || teamOf(r.workLoc), status: r.status,
@@ -189,9 +193,10 @@ export function createDb(conn) {
       added AS (SELECT 1e9 AS ord, to_jsonb(d) AS e FROM d WHERE NOT EXISTS (SELECT 1 FROM h WHERE upper(h.e->>'wo') = upper(d.wo)))
       UPDATE docs SET updated_at = now(), data = data || jsonb_build_object(
         'rows', (SELECT COALESCE(jsonb_agg(e ORDER BY ord), '[]'::jsonb) FROM (SELECT ord, e FROM upd UNION ALL SELECT ord, e FROM added) z),
-        'syncedAt', $3::text)
+        'syncedAt', $3::text, 'asOf', GREATEST(COALESCE(data->>'asOf', ''), COALESCE($4::text, '')))
       WHERE collection = 'wohist' AND id = 'current'`,
-    [JSON.stringify(daily), day, new Date().toISOString()]);
+    [JSON.stringify(daily), day, new Date().toISOString(), fileDate || null]);
+    return 'synced';
   };
 
   return {
@@ -327,7 +332,8 @@ export function createDb(conn) {
       const part = Math.max(0, parseInt(body?.part, 10) || 0);
       return tx(async (c) => {
         if (part === 0) {
-          await put(c, 'wohist', 'current', { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows });
+          const asOf = DATE_RE.test(body?.asOf) ? body.asOf : null; // how current the export is (latest date in it)
+          await put(c, 'wohist', 'current', { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), asOf, rows });
         } else {
           const r = await c.query("UPDATE docs SET data = jsonb_set(data, '{rows}', (data->'rows') || $1::jsonb), updated_at = now() WHERE collection = 'wohist' AND id = 'current'", [JSON.stringify(rows)]);
           if (!r.rowCount) throw bad('history import must start with part 0');
@@ -344,6 +350,7 @@ export function createDb(conn) {
     saveBacklog(body, by) {
       const rows = cleanBacklog(body?.rows);
       const doc = { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows };
+      const fileDate = DATE_RE.test(body?.fileDate) ? body.fileDate : null; // as-of date of this daily file
       // Baseline: restart the performance report from this file on the given day (today or up to 60 days back).
       const base = DATE_RE.test(body?.baseline) ? body.baseline : null;
       if (base) {
@@ -351,11 +358,12 @@ export function createDb(conn) {
         const oldest = iso(new Date(bangkokToday().getTime() - 60 * 864e5));
         if (base > today || base < oldest) throw bad('invalid baseline date');
         return tx(async (c) => {
-          await syncHist(c, rows, iso(bangkokToday()));
+          const hist = await syncHist(c, rows, iso(bangkokToday()), fileDate);
           await c.query("DELETE FROM docs WHERE collection = 'stats'");
           await put(c, 'stats', base, baselineStats(rows, base, doc.uploadedAt, doc.fileName));
           await put(c, 'backlog', 'current', doc);
           await stamp(c, by);
+          return { hist };
         });
       }
       return tx(async (c) => {
@@ -366,9 +374,10 @@ export function createDb(conn) {
         const old = (await c.query("SELECT data FROM docs WHERE collection = 'stats' AND id = $1", [day])).rows[0]?.data;
         const stats = foldDayStats(old, { day, events: dayEvents(prev?.rows, rows, day), snapshot: openSnapshot(rows, t), at: doc.uploadedAt, fileName: doc.fileName });
         await put(c, 'stats', day, stats);
-        await syncHist(c, rows, day);
+        const hist = await syncHist(c, rows, day, fileDate);
         await put(c, 'backlog', 'current', doc);
         await stamp(c, by);
+        return { hist };
       });
     },
 

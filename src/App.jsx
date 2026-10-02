@@ -13,7 +13,7 @@ import { readLocalBackup, useDashboardStore } from './lib/store.js';
 import { buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
 import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
-import { histRowsFrom, jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
+import { fileAsOf, histRowsFrom, jobFromWo, latestDateIn, normWo, parseBacklogWorkbook } from './lib/cmms.js';
 import { findDuplicates } from './lib/dedupe.js';
 import DuplicatesDialog from './components/Duplicates.jsx';
 import { BulkDeleteDialog, SelectBar } from './components/Selection.jsx';
@@ -234,15 +234,15 @@ export default function App() {
   };
 
   // Add a CMMS WO to Top 5: prefill the job form (the plant limit and password still apply).
-  const trackWo = (row) => {
+  const trackWo = (row, list = 'risk') => {
     const existing = data.jobs.find((j) => j.wo && normWo(j.wo) === normWo(row.wo));
     if (existing) { setFlashId(existing.id); return; }
     if (data.jobs.filter((j) => j.plant === row.plant).length >= MAX_JOBS_PER_PLANT) {
       setToast({ text: `โรงไฟฟ้า ${row.plant} มีงานครบ ${MAX_JOBS_PER_PLANT} งานแล้ว ลบหรือปิดงานเดิมก่อน`, error: true });
       return;
     }
-    // Goes to the machine-risk list by default; the form lets the user switch to daily work.
-    setModal({ type: 'job', job: { ...jobFromWo(row, t, nextRank(row.plant, 'risk')), list: 'risk' } });
+    // Goes to the machine-risk list by default (daily tab passes 'daily'); the form lets the user switch.
+    setModal({ type: 'job', job: { ...jobFromWo(row, t, nextRank(row.plant, list)), list } });
   };
 
   const importFile = async (f) => {
@@ -363,6 +363,7 @@ export default function App() {
                         onSelect={selectJobs}
                         onEditJob={(job) => setModal({ type: 'job', job })}
                         onAddJob={(list) => openNew(p.id, list)}
+                        onTrackDaily={(row) => trackWo(row, 'daily')}
                         onReorder={(ids) => { if (!busy) run(() => store.reorderJobs(ids), 'จัดอันดับแล้ว'); }}
                         onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
                         onPhoto={setLightbox}
@@ -444,7 +445,7 @@ export default function App() {
               ? `อัปเดต WO Backlog แล้ว · ใหม่ ${merge.added} · สถานะเปลี่ยน ${merge.changed.length}${merge.removed ? ` · ลบ ${merge.removed}` : ''}`
               : `อัปโหลด WO Backlog แล้ว · ${merge.rows.length} WO`;
             const lineNote = { sent: ' · ส่งสรุปเข้า LINE แล้ว', failed: ' · ส่ง LINE ไม่สำเร็จ (ตรวจ token/LINE_TO)' };
-            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows, ...(baseline ? { baseline } : {}) }), (res) => msg + (lineNote[res?.line] || ''));
+            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows, fileDate: fileAsOf(backlogUp.fileName, backlogUp.parsed.rows), ...(baseline ? { baseline } : {}) }), (res) => msg + (res?.hist === 'skipped' ? ' · ไฟล์นี้เก่ากว่าฐานข้อมูลประวัติ จึงไม่ได้อัปเดตฐาน' : res?.hist === 'synced' ? ' · อัปเดตฐานข้อมูลประวัติแล้ว' : '') + (lineNote[res?.line] || ''));
             setBacklogUp(null);
           }}
         />
@@ -456,7 +457,7 @@ export default function App() {
           busy={busy}
           onCancel={() => setHistUp(null)}
           onConfirm={async () => {
-            await run(() => store.uploadHistory({ fileName: histUp.fileName, rows: histUp.rows }), `นำเข้าฐานข้อมูลประวัติแล้ว · ${histUp.rows.length.toLocaleString()} WO`);
+            await run(() => store.uploadHistory({ fileName: histUp.fileName, rows: histUp.rows, asOf: latestDateIn(histUp.rows) }), `นำเข้าฐานข้อมูลประวัติแล้ว · ${histUp.rows.length.toLocaleString()} WO`);
             setHistUp(null);
           }}
         />
