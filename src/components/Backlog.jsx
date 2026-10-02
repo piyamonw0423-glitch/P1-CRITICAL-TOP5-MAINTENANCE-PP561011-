@@ -201,17 +201,26 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
         <div className="modal-body-col import-body">
           <p className="import-file">{fileName}</p>
           <div className="merge-stats">
-            <span className="is-new"><b>{merge.added}</b> WO ใหม่</span>
+            <span className="is-new"><b>{merge.added}</b> WO เข้าใหม่</span>
             <span className="is-changed"><b>{merge.changed.length}</b> สถานะเปลี่ยน</span>
             <span><b>{merge.unchanged}</b> ไม่เปลี่ยน</span>
             {current && <span className="is-missing"><b>{merge.missing}</b> ไม่อยู่ในไฟล์นี้</span>}
           </div>
           {fileDupes > 0 && <p className="import-note">ไฟล์มีเลข WO ซ้ำ {fileDupes} แถว — นับครั้งเดียว (ใช้แถวแรก)</p>}
+          {current && merge.addedRows.length > 0 && (
+            <div className="import-errors merge-changes is-new-list">
+              <div className="field-label">WO เข้าใหม่ (ไม่มีในไฟล์รอบก่อน = งานเข้ามาหลังการอัปโหลดครั้งที่แล้ว)</div>
+              <ul>
+                {merge.addedRows.slice(0, 30).map((r) => <li key={r.wo}><b>{r.wo}</b> โรง {r.plant}{r.team && r.team !== 'OTHER' ? ` · ${r.team}` : ''} · <b>{r.status}</b> <span className="sub">{r.desc}</span></li>)}
+                {merge.addedRows.length > 30 && <li>และอีก {merge.addedRows.length - 30} WO</li>}
+              </ul>
+            </div>
+          )}
           {merge.changed.length > 0 && (
             <div className="import-errors merge-changes">
-              <div className="field-label">สถานะที่เปลี่ยน</div>
+              <div className="field-label">สถานะที่เปลี่ยน (Status คอลัมน์ L){merge.changed.some((c) => c.to === 'CLOSED') ? ` · CLOSED ${merge.changed.filter((c) => c.to === 'CLOSED').length} WO` : ''}</div>
               <ul>
-                {merge.changed.slice(0, 20).map((c) => <li key={c.wo}><b>{c.wo}</b> โรง {c.plant} · {c.from} → <b>{c.to}</b> <span className="sub">{c.desc}</span></li>)}
+                {[...merge.changed].sort((a, b) => (b.to === 'CLOSED') - (a.to === 'CLOSED')).slice(0, 20).map((c) => <li key={c.wo} className={c.to === 'CLOSED' ? 'is-closed' : ''}><b>{c.wo}</b> โรง {c.plant} · {c.from} → <b>{c.to}</b>{c.to === 'CLOSED' ? ' ✓' : ''} <span className="sub">{c.desc}</span></li>)}
                 {merge.changed.length > 20 && <li>และอีก {merge.changed.length - 20} WO</li>}
               </ul>
             </div>

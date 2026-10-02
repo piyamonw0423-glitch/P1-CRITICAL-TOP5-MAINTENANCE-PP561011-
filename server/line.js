@@ -65,14 +65,18 @@ export function summaryText({ days, backlog, url }) {
   const p = prev ? statTotals(prev, PLANT_IDS) : null;
   const teams = TEAMS.map((tm) => [tm.label, statTotals(cur, PLANT_IDS, tm.k).open]).filter(([, n]) => n > 0);
   const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));
-  const fresh = (cur.new || []).slice(0, 8).map(([wo, plant, team]) => `• ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`);
+  const fresh = [...(cur.new || [])].sort((a, b) => (b[4] || 0) - (a[4] || 0)).slice(0, 8)
+    .map(([wo, plant, team, , mid]) => `${mid === 1 ? '⚡' : '•'} ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`);
+  const assumedSet = new Set((cur.assumed || []).map((x) => String(x[0])));
+  const closedByStatus = (cur.closed || []).filter((x) => !assumedSet.has(String(x[0])));
   const round = cur.rounds?.at(-1)?.at;
   return [
     `📋 รายงาน WO P1 · ${thaiDate(cur.date)}${round ? ` · รอบ ${hm(round)} น.` : ''}`,
-    `ใหม่ ${t.new} · เริ่มงาน ${t.started} · เสร็จรอปิด ${t.finished} · CLOSED ${t.closed}${t.assumed ? ` (ไม่พบในไฟล์ ${t.assumed})` : ''} (สะสมทั้งวัน)`,
+    `เข้าใหม่ ${t.new}${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''} · เริ่มงาน ${t.started} · เสร็จรอปิด ${t.finished} · CLOSED ${t.closedStatus}${t.assumed ? ` + ไม่พบในไฟล์ ${t.assumed}` : ''} (สะสมทั้งวัน)`,
     `คงค้าง ${t.open} WO${p ? ` (${signed(t.open - p.open)} จาก ${shortDate(prev.date)})` : ''} · เกิน 30 วัน ${t.a90 + t.aMore}`,
     teams.map(([l, n]) => `${l} ${n}`).join(' · '),
-    ...(fresh.length ? ['', `🆕 WO ใหม่ ${t.new} รายการ`, ...fresh, ...(t.new > fresh.length ? [`…และอีก ${t.new - fresh.length} รายการ`] : [])] : []),
+    ...(closedByStatus.length ? ['', `✅ CLOSED (Status) ${closedByStatus.length} WO`, ...closedByStatus.slice(0, 8).map(([wo, plant, team]) => `• ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`), ...(closedByStatus.length > 8 ? [`…และอีก ${closedByStatus.length - 8} รายการ`] : [])] : []),
+    ...(fresh.length ? ['', `🆕 WO เข้าใหม่ ${t.new} รายการ${t.inserted ? ` (⚡ แทรกระหว่างวัน ${t.inserted})` : ''}`, ...fresh, ...(t.new > fresh.length ? [`…และอีก ${t.new - fresh.length} รายการ`] : [])] : []),
     ...((cur.assumed || []).length ? ['', `❓ ไม่พบในไฟล์ล่าสุด → นับเป็น CLOSED ${cur.assumed.length} WO (โปรดตรวจใน CMMS)`,
       ...cur.assumed.slice(0, 8).map(([wo, plant, team]) => `• ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`),
       ...(cur.assumed.length > 8 ? [`…และอีก ${cur.assumed.length - 8} รายการ`] : [])] : []),

@@ -179,6 +179,7 @@ export function mergeBacklog(current, incoming, today, removeMissing = false, no
   const rows = [];
   const changed = [];
   let added = 0, unchanged = 0;
+  const addedRows = [];
   for (const r of incoming) {
     const key = normWo(r.wo);
     if (seen.has(key)) continue;
@@ -186,6 +187,7 @@ export function mergeBacklog(current, incoming, today, removeMissing = false, no
     const prev = old.get(key);
     if (!prev) {
       added++;
+      addedRows.push(r);
       rows.push({ ...r, firstSeen: day, lastSeen: day, seenAt, statusSince: day, prevStatus: '' });
     } else if (prev.status !== r.status) {
       changed.push({ wo: r.wo, plant: r.plant, desc: r.desc, from: prev.status, to: r.status });
@@ -197,7 +199,7 @@ export function mergeBacklog(current, incoming, today, removeMissing = false, no
   }
   const leftOut = [...old.entries()].filter(([k]) => !seen.has(k)).map(([, r]) => r);
   if (!removeMissing) rows.push(...leftOut);
-  return { rows, added, changed, unchanged, missing: leftOut.length, missingRows: leftOut, removed: removeMissing ? leftOut.length : 0 };
+  return { rows, added, addedRows, changed, unchanged, missing: leftOut.length, missingRows: leftOut, removed: removeMissing ? leftOut.length : 0 };
 }
 
 /** Did the latest upload change this row's status? */
@@ -276,9 +278,12 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120), ...(baseline ? { baseline: true } : {}) }].slice(-12) };
   if (baseline || prev?.baseline) out.baseline = true;
   const back = new Set(events.back || []);
+  // New WOs carry [wo, plant, team, upload time, 1 if it appeared after the day's first upload = inserted during the day].
+  const midday = (prev?.rounds || []).length > 0 ? 1 : 0;
+  const tagged = { ...events, new: (events.new || []).map((t) => [t[0], t[1], t[2], at, midday]) };
   for (const k of EVENT_KEYS) {
     const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
-    out[k] = [...(prev?.[k] || []), ...(events[k] || []).filter((t) => !seen.has(normWo(t[0])))]
+    out[k] = [...(prev?.[k] || []), ...(tagged[k] || []).filter((t) => !seen.has(normWo(t[0])))]
       .filter((t) => !((k === 'closed' || k === 'assumed') && back.has(normWo(t[0]))) || (events[k] || []).some((e) => normWo(e[0]) === normWo(t[0])))
       .slice(0, 2000);
   }
@@ -289,9 +294,11 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
 /** Sum a stats document for some plants and (optionally) one team. */
 export function statTotals(doc, ids, team = null) {
   const keep = (plant, t) => ids.includes(Number(plant)) && (!team || t === team);
-  const t = { new: 0, started: 0, finished: 0, closed: 0, assumed: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
+  const t = { new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
   for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([, p, tm]) => keep(p, tm)).length;
+  t.inserted = (doc.new || []).filter(([, p, tm, , mid]) => keep(p, tm) && mid === 1).length; // came in after the day's first upload
+  t.closedStatus = t.closed - t.assumed; // Status (column L) changed to CLOSED
   for (const [key, o] of Object.entries(doc.open || {})) {
     const [p, tm] = key.split('|');
     if (!keep(p, tm)) continue;

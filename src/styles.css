@@ -468,3 +468,10 @@ a { color: oklch(0.5 0.17 255); }
 .baseline-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
 .baseline-box .import-note { width: 100%; margin: 0; }
 .baseline-date { width: auto; padding: 4px 8px; }
+.rep-tile.is-insert .rep-tile-sub { color: oklch(0.5 0.15 60); font-weight: 700; }
+.rep-new li.is-insert { background: oklch(0.96 0.05 85); }
+.rep-new .rep-age { color: oklch(0.5 0.15 60); }
+.rep-closed li { background: oklch(0.97 0.03 150); }
+.rep-age.is-ok { color: var(--done-ink); }
+.merge-changes.is-new-list { background: oklch(0.97 0.03 150); }
+.merge-changes li.is-closed { color: var(--done-ink); }
