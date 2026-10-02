@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { TEAMS, ageDays, effGroup, isClosedGroup, latestSeen, roundTotals, statTotals } from '../lib/cmms.js';
+import { ageDays, effGroup, isClosedGroup, latestSeen, openSnapshot, roundTotals, scopeMatch, statTotals, teamOf, wlOptions } from '../lib/cmms.js';
+import WlSelect from './WlSelect.jsx';
 import { pd, thD } from '../lib/dates.js';
 import { plantNumbers, roundLabel, roundReportText } from '../lib/roundReport.js';
 
@@ -147,31 +148,38 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   const narrow = useNarrow();
   const span = narrow ? 7 : 14;
   const cw = narrow ? 340 : 560;
-  const cur = days.find((d) => d.date === date) || days.at(-1);
-  const idx = cur ? days.indexOf(cur) : -1;
+  const picked = days.find((d) => d.date === date) || days.at(-1);
+  // Open snapshots saved before Oct 2026 are keyed plant|team only; for the latest day rebuild it from the
+  // current backlog so the WO_Worklocation filter shows real open counts right away.
+  const legacySnap = (d) => Object.keys(d?.open || {}).some((k) => k.split('|').length < 3);
+  const cur = useMemo(() => (picked && picked === days.at(-1) && legacySnap(picked) && backlog?.rows?.length
+    ? { ...picked, open: openSnapshot(backlog.rows, today) } : picked), [picked, days, backlog, today]);
+  const idx = picked ? days.indexOf(picked) : -1;
   const prev = idx > 0 ? days[idx - 1] : null;
-  const tm = team || null;
-  const tot = statTotals(cur, ids, tm);
-  const prevTot = prev ? statTotals(prev, ids, tm) : null;
+  const tm = team || null; // WO_Worklocation code
+  const byWo = useMemo(() => new Map((backlog?.rows || []).map((r) => [String(r.wo), r])), [backlog]);
+  const wlOf = (wo) => byWo.get(String(wo))?.workLoc || ''; // for events recorded before tuples carried the code
+  const tot = statTotals(cur, ids, tm, wlOf);
+  const prevTot = prev ? statTotals(prev, ids, tm, wlOf) : null;
 
   const trend = days.slice(Math.max(0, idx - span + 1), idx + 1).map((d) => {
-    const s = statTotals(d, ids, tm);
+    const s = statTotals(d === picked ? cur : d, ids, tm, wlOf);
     return { date: d.date, started: s.started, closed: s.closed, open: s.open, old: s.a90 + s.aMore };
   });
 
-  const teams = TEAMS.filter((t) => t.k !== 'OTHER' || statTotals(cur, ids, 'OTHER').open > 0);
-  const byTeam = teams.map((t) => ({ ...t, ...statTotals(cur, ids, t.k) }));
+  const seenWl = useMemo(() => (backlog?.rows || []).map((r) => r.workLoc), [backlog]);
+  const byTeam = wlOptions(seenWl).map((o) => ({ k: o.code, label: o.code, team: o.team, ...statTotals(cur, ids, o.code, wlOf) }));
 
   // Oldest open WOs from the current snapshot (the "still not closed" list for team leads).
   const latest = useMemo(() => latestSeen(backlog?.rows), [backlog]);
   const oldest = useMemo(() => (backlog?.rows || [])
-    .filter((r) => ids.includes(r.plant) && (!tm || (r.team || 'OTHER') === tm) && !isClosedGroup(effGroup(r, latest)))
+    .filter((r) => ids.includes(r.plant) && scopeMatch(tm, r.team || teamOf(r.workLoc), r.workLoc) && !isClosedGroup(effGroup(r, latest)))
     .map((r) => ({ ...r, age: ageDays(r, today) ?? 0 }))
     .sort((a, b) => b.age - a.age), [backlog, ids, tm, today, latest]);
   // WOs that dropped out of the file on this day and were counted as CLOSED — the list to check in the CMMS.
-  const byWo = useMemo(() => new Map((backlog?.rows || []).map((r) => [String(r.wo), r])), [backlog]);
-  const rounds = roundTotals(cur, ids, tm);
-  const inScope = ([, p, t]) => ids.includes(Number(p)) && (!tm || t === tm);
+  const rounds = roundTotals(cur, ids, tm, wlOf);
+  const oldSnap = !!tm && legacySnap(cur); // older days cannot be split by work location
+  const inScope = ([wo, p, t, , , wl]) => ids.includes(Number(p)) && scopeMatch(tm, t, wl || wlOf(wo));
   // New in the system on this day (⚡ = appeared after the day's first upload: inserted during the day).
   const fresh = (cur?.new || []).filter(inScope)
     .map(([wo, plant, t, at, mid]) => ({ wo, plant, team: t, at, mid: mid === 1, row: byWo.get(String(wo)) }))
@@ -181,7 +189,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   const closedByStatus = (cur?.closed || []).filter((t) => inScope(t) && !assumedSet.has(String(t[0])))
     .map(([wo, plant, t]) => ({ wo, plant, team: t, row: byWo.get(String(wo)) }));
   const assumed = (cur?.assumed || [])
-    .filter(([, p, t]) => ids.includes(Number(p)) && (!tm || t === tm))
+    .filter(inScope)
     .map(([wo, plant, t]) => ({ wo, plant, team: t, row: byWo.get(String(wo)) }));
 
   if (!cur) {
@@ -194,8 +202,8 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
     );
   }
 
-  const scope = `${plantLabel}${tm ? ` · ทีม ${TEAMS.find((t) => t.k === tm).label}` : ' · ทุกทีม'}`;
-  const openDelta = prevTot ? tot.open - prevTot.open : null;
+  const scope = `${plantLabel}${tm ? ` · ${tm} (${teamOf(tm)})` : ' · ทุก WO_Worklocation'}`;
+  const openDelta = prevTot && !(tm && legacySnap(prev)) ? tot.open - prevTot.open : null;
   const summary = () => {
     const lines = [
       `📋 รายงาน WO P1 ${dayLabel(cur.date)} ${pd(cur.date).getFullYear() + 543} (อัปเดต ${cur.rounds.map((r) => hm(r.at)).join(', ')} น.)`,
@@ -203,7 +211,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
       `เปิดงาน (WO ใหม่) ${tot.new}${tot.inserted ? ` (⚡แทรกระหว่างวัน ${tot.inserted})` : ''} · เริ่มงาน ${tot.started} · เสร็จรอปิด ${tot.finished} · CLOSED ${tot.closed}${tot.assumed ? ` (Status ${tot.closedStatus} + ไม่พบในไฟล์ ${tot.assumed})` : ''}`,
       ...rounds.filter((r) => !r.baseline).map((r) => `  รอบ ${hm(r.at)} น.: เปิด ${r.new}${r.inserted ? ` (แทรก ${r.inserted})` : ''} · เริ่ม ${r.started} · เสร็จรอปิด ${r.finished} · CLOSED ${r.closed}`),
       `คงค้าง ${tot.open} WO${openDelta != null ? ` (${signed(openDelta)} จาก ${dayLabel(prev.date)})` : ''} · ค้างเกิน 30 วัน ${tot.a90 + tot.aMore}`,
-      ...(tm ? [] : byTeam.filter((t) => t.open || t.closed || t.started).map((t) => `• ${t.label}: ค้าง ${t.open} (เกิน 30 วัน ${t.a90 + t.aMore}) · เริ่ม ${t.started} · ปิด ${t.closed}`)),
+      ...(tm ? [] : byTeam.filter((t) => t.open || t.closed || t.started).map((t) => `• ${t.label} (${t.team}): ค้าง ${t.open} (เกิน 30 วัน ${t.a90 + t.aMore}) · เริ่ม ${t.started} · ปิด ${t.closed}`)),
       ...(fresh.length ? ['', `WO เข้าใหม่ ${fresh.length} (⚡ แทรกระหว่างวัน = Actual Start วันนี้):`,
         ...fresh.slice(0, 15).map((f) => `${f.mid ? '⚡' : '•'} ${f.wo} PP${f.plant} ${f.team} ${f.row?.status || ''} – ${String(f.row?.desc || '').slice(0, 45)}`)] : []),
       ...(closedByStatus.length ? ['', `CLOSED (Status ใน CMMS) ${closedByStatus.length}:`,
@@ -246,10 +254,9 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
         </span>
       </div>
 
-      <div className="rep-chips" role="group" aria-label="เลือกทีม">
-        {[{ k: '', label: 'ทุกทีม' }, ...teams].map((t) => (
-          <button key={t.k || 'all'} type="button" className={`chip${team === t.k ? ' is-on' : ''}`} onClick={() => setTeam(t.k)}>{t.label}</button>
-        ))}
+      <div className="rep-chips">
+        <WlSelect value={team} onChange={setTeam} seen={seenWl} />
+        {oldSnap && <span className="muted rep-wl-note">วันนี้เป็นข้อมูลเก่า: คงค้างแยก WO_Worklocation ไม่มีบันทึก</span>}
         <span className="rep-rounds">{cur.baseline && <b className="rep-base">Baseline</b>} อัปโหลด {cur.rounds.length} รอบ: {cur.rounds.map((r) => hm(r.at)).join(', ')} น.</span>
       </div>
 
@@ -287,14 +294,14 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
               </tbody>
             </table>
           </div>
-          <div className="rep-sub">แยกตามทีม (WO_Worklocation) · {dayLabel(cur.date)}</div>
+          <div className="rep-sub">แยกตาม WO_Worklocation · {dayLabel(cur.date)}</div>
           <div className="rep-table-wrap">
             <table className="rep-table">
-              <thead><tr><th>ทีม</th><th>เปิดงาน</th><th>⚡แทรก</th><th>เริ่ม</th><th>เสร็จรอปิด</th><th>CLOSED</th><th>คงค้าง</th><th>&gt;30 วัน</th></tr></thead>
+              <thead><tr><th>WO_Worklocation</th><th>เปิดงาน</th><th>⚡แทรก</th><th>เริ่ม</th><th>เสร็จรอปิด</th><th>CLOSED</th><th>คงค้าง</th><th>&gt;30 วัน</th></tr></thead>
               <tbody>
                 {byTeam.map((t) => (
                   <tr key={t.k} className={team === t.k ? 'is-on' : ''} onClick={() => setTeam(team === t.k ? '' : t.k)}>
-                    <th>{t.label}</th><td>{t.new}</td><td>{t.inserted}</td><td>{t.started}</td><td>{t.finished}</td><td>{t.closed}</td><td><b>{t.open}</b></td><td>{t.a90 + t.aMore}</td>
+                    <th>{t.label} <span className="muted">{t.team}</span></th><td>{t.new}</td><td>{t.inserted}</td><td>{t.started}</td><td>{t.finished}</td><td>{t.closed}</td><td><b>{t.open}</b></td><td>{t.a90 + t.aMore}</td>
                   </tr>
                 ))}
               </tbody>

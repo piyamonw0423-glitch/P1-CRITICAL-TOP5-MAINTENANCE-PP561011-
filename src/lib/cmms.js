@@ -53,6 +53,16 @@ export const TEAMS = [
   { k: 'EMER', label: 'EMER', codes: ['WL5122', 'WL5123'] },
   { k: 'OTHER', label: 'ไม่ระบุ', codes: [] },
 ];
+const TEAM_KEYS = new Set(TEAMS.map((t) => t.k));
+export const normWl = (s) => String(s || '').trim().toUpperCase();
+/** Report scope filter: '' = everything, a team key (MECH…) = that team, anything else = one WO_Worklocation code. */
+export const scopeMatch = (f, team, wl) => !f || (TEAM_KEYS.has(f) ? team === f : normWl(wl) === f);
+/** WO_Worklocation codes for a filter dropdown: the known team codes first, then any other code seen in the data. */
+export const wlOptions = (seen = []) => {
+  const known = TEAMS.flatMap((t) => t.codes);
+  const extra = [...new Set(seen.map(normWl).filter((c) => c && !known.includes(c)))].sort();
+  return [...known, ...extra].map((c) => ({ code: c, team: teamOf(c) }));
+};
 const TEAM_BY_CODE = Object.fromEntries(TEAMS.flatMap((t) => t.codes.map((c) => [c, t.k])));
 /** Team key for a work-location code (also accepts a code that already carries the team name). */
 export const teamOf = (workLoc) => {
@@ -212,10 +222,10 @@ export const changedIn = (r, latest) => !!(latest && r.changedAt === latest);
 const WORKING = new Set(['inprg', 'rework']);
 const DOING_OR_DONE = new Set(['inprg', 'rework', 'finish', 'closed']);
 const rowTeam = (r) => (r.workLoc ? teamOf(r.workLoc) : r.team || 'OTHER');
-const tuple = (r) => [r.wo, r.plant, rowTeam(r)];
+const tuple = (r) => [r.wo, r.plant, rowTeam(r), normWl(r.workLoc)];
 
 /**
- * What happened between two backlog snapshots on `day` (YYYY-MM-DD), as [wo, plant, team] lists:
+ * What happened between two backlog snapshots on `day` (YYYY-MM-DD), as [wo, plant, team, workLoc] lists:
  * new WOs, started (moved from waiting into APPR/INPRG/REWORK, or Actual Start = day),
  * finished (moved into FINISH/WACCEPT/COMP, or Actual Finish = day) and closed (moved into CLOSED).
  * A WO that was in the previous file (not yet closed) but is missing from this one is listed in `assumed`
@@ -241,7 +251,7 @@ export function dayEvents(prevRows, nextRows, day) {
     if (prev && !presentIn(prev, prevLatest) && groupOf(r.status).key !== 'closed') ev.back.push(normWo(r.wo));
     const g = groupOf(r.status).key;
     const pg = prev ? groupOf(prev.status).key : null;
-    // New in the file; the 4th field marks "inserted during the day" = its Actual Start is the upload day itself.
+    // New in the file; the 5th field marks "inserted during the day" = its Actual Start is the upload day itself.
     if (!prev && hasPrev) ev.new.push([...tuple(r), r.actualStart === day ? 1 : 0]);
     const moved = prev && prev.status !== r.status;
     if ((moved && !DOING_OR_DONE.has(pg) && WORKING.has(g)) || (r.actualStart === day && prev?.actualStart !== day)) ev.started.push(tuple(r));
@@ -253,14 +263,14 @@ export function dayEvents(prevRows, nextRows, day) {
 
 const AGE_BUCKETS = [['a7', 7], ['a30', 30], ['a90', 90], ['aMore', Infinity]];
 
-/** Open (not finished/closed) WOs per "plant|team" with age buckets, plus finished-waiting-to-close counts. */
+/** Open (not finished/closed) WOs per "plant|team|workLoc" with age buckets, plus finished-waiting-to-close counts. */
 export function openSnapshot(rows, today) {
   const by = {};
   const latest = latestSeen(rows);
   for (const r of rows) {
     const g = effGroup(r, latest);
     if (g === 'closed') continue;
-    const k = `${r.plant}|${rowTeam(r)}`;
+    const k = `${r.plant}|${rowTeam(r)}|${normWl(r.workLoc)}`;
     const o = (by[k] ||= { open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 });
     if (g === 'finish') { o.finish++; continue; }
     o.open++;
@@ -281,10 +291,10 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120), ...(baseline ? { baseline: true } : {}) }].slice(-12) };
   if (baseline || prev?.baseline) out.baseline = true;
   const back = new Set(events.back || []);
-  // Every event carries [wo, plant, team, upload time, flag]. For new WOs the flag means "inserted during the day"
+  // Every event carries [wo, plant, team, upload time, flag, workLoc] (workLoc added Oct 2026; older docs lack it). For new WOs the flag means "inserted during the day"
   // (team rule: a new WO whose Actual Start is the upload day); for other events it marks a later upload of the day.
   const midday = (prev?.rounds || []).length > 0 ? 1 : 0;
-  const tagged = Object.fromEntries(EVENT_KEYS.map((k) => [k, (events[k] || []).map((t) => [t[0], t[1], t[2], at, k === 'new' ? (t[3] === 1 ? 1 : 0) : midday])]));
+  const tagged = Object.fromEntries(EVENT_KEYS.map((k) => [k, (events[k] || []).map((t) => [t[0], t[1], t[2], at, k === 'new' ? (t[4] === 1 ? 1 : 0) : midday, t[3] || ''])]));
   for (const k of EVENT_KEYS) {
     const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
     out[k] = [...(prev?.[k] || []), ...(tagged[k] || []).filter((t) => !seen.has(normWo(t[0])))]
@@ -296,10 +306,10 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
 }
 
 /** Per upload round of a stats document: [{ at, fileName, new, inserted, started, finished, closed, missing }]. */
-export function roundTotals(doc, ids, team = null) {
-  const keep = (plant, t) => ids.includes(Number(plant)) && (!team || t === team);
+export function roundTotals(doc, ids, team = null, wlOf = null) {
+  const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && scopeMatch(team, t, wl || wlOf?.(wo));
   return (doc?.rounds || []).map((r, i) => {
-    const mine = (k) => (doc[k] || []).filter((t) => keep(t[1], t[2]) && (t[3] ? t[3] === r.at : i === 0));
+    const mine = (k) => (doc[k] || []).filter((t) => keep(t[1], t[2], t[0], t[5]) && (t[3] ? t[3] === r.at : i === 0));
     return {
       at: r.at, fileName: r.fileName, baseline: !!r.baseline,
       new: mine('new').length, inserted: mine('new').filter((t) => t[4] === 1).length,
@@ -308,17 +318,20 @@ export function roundTotals(doc, ids, team = null) {
   });
 }
 
-/** Sum a stats document for some plants and (optionally) one team. */
-export function statTotals(doc, ids, team = null) {
-  const keep = (plant, t) => ids.includes(Number(plant)) && (!team || t === team);
+/**
+ * Sum a stats document for some plants and (optionally) one team or WO_Worklocation code (see scopeMatch).
+ * wlOf(wo) fills in the code for events recorded before tuples carried it.
+ */
+export function statTotals(doc, ids, team = null, wlOf = null) {
+  const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && scopeMatch(team, t, wl || (wo != null ? wlOf?.(wo) : ''));
   const t = { new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
-  for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([, p, tm]) => keep(p, tm)).length;
-  t.inserted = (doc.new || []).filter(([, p, tm, , mid]) => keep(p, tm) && mid === 1).length; // came in after the day's first upload
+  for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl)).length;
+  t.inserted = (doc.new || []).filter(([wo, p, tm, , mid, wl]) => keep(p, tm, wo, wl) && mid === 1).length; // came in after the day's first upload
   t.closedStatus = MISSING_IS_CLOSED ? t.closed - t.assumed : t.closed; // Status (column L) → CLOSED
   for (const [key, o] of Object.entries(doc.open || {})) {
-    const [p, tm] = key.split('|');
-    if (!keep(p, tm)) continue;
+    const [p, tm, wl = ''] = key.split('|');
+    if (!keep(p, tm, null, wl)) continue;
     for (const f of ['open', 'finish', 'a7', 'a30', 'a90', 'aMore']) t[f] += o[f] || 0;
   }
   return t;
@@ -419,7 +432,7 @@ export function applyDailyToHist(hist, dailyRows, day) {
 export const histTeam = (h) => (h.wl ? teamOf(h.wl) : h.team || 'OTHER');
 
 export function histTotals(rows, ids, from, to, team = null) {
-  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && (!team || histTeam(h) === team));
+  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && scopeMatch(team, histTeam(h), h.wl));
   const t = { opened: 0, closed: 0, backlogEnd: 0, inProgress: 0, waiting: 0, finishWait: 0, material: 0 };
   for (const h of mine) {
     const closed = histClosed(h);

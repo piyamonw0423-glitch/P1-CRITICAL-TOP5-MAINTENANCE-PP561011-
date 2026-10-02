@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { TEAMS, histSeries, histTeam, histTotals } from '../lib/cmms.js';
+import { histSeries, histTeam, histTotals, teamOf, wlOptions } from '../lib/cmms.js';
+import WlSelect from './WlSelect.jsx';
 import { TH_M, iso } from '../lib/dates.js';
 import { CLOSE, FlowChart, OpenChart, START } from './Report.jsx';
 
@@ -69,8 +70,8 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
 
   const tot = histTotals(rows, ids, range[0], range[1], tm);
   const series = histSeries(rows, ids, buckets, tm).map((b) => ({ date: b.date, label: b.label, started: b.opened, closed: b.closed, open: b.backlogEnd }));
-  const teams = TEAMS.filter((x) => x.k !== 'OTHER' || rows.some((h) => histTeam(h) === 'OTHER' && ids.includes(Number(h.plant))));
-  const byTeam = teams.map((x) => ({ ...x, ...histTotals(rows, ids, range[0], range[1], x.k) }));
+  const seenWl = rows.map((h) => h.wl);
+  const byTeam = wlOptions(seenWl).map((o) => ({ k: o.code, label: o.code, team: o.team, ...histTotals(rows, ids, range[0], range[1], o.code) }));
   const months = Array.from({ length: today.getMonth() + 1 }, (_, m) => {
     const from = iso(new Date(year, m, 1));
     const end = iso(new Date(year, m + 1, 0));
@@ -82,7 +83,7 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
   return (
     <section className="panel rep hist" aria-label="ผลงานสะสม">
       <div className="panel-head panel-head-split">
-        <span>ผลงาน P1 สะสม · {plantLabel}{tm ? ` · ทีม ${TEAMS.find((x) => x.k === tm).label}` : ' · ทุกทีม'}</span>
+        <span>ผลงาน P1 สะสม · {plantLabel}{tm ? ` · ${tm} (${teamOf(tm)})` : ' · ทุก WO_Worklocation'}</span>
         <span className="rep-controls">
           {PERIODS.map((p) => (
             <button key={p.k} type="button" className={`chip chip-on-navy${period === p.k ? ' is-on' : ''}`} onClick={() => setPeriod(p.k)}>{p.label}</button>
@@ -90,10 +91,8 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
         </span>
       </div>
 
-      <div className="rep-chips" role="group" aria-label="เลือกทีม">
-        {[{ k: '', label: 'ทุกทีม' }, ...teams].map((x) => (
-          <button key={x.k || 'all'} type="button" className={`chip${team === x.k ? ' is-on' : ''}`} onClick={() => setTeam(x.k)}>{x.label}</button>
-        ))}
+      <div className="rep-chips">
+        <WlSelect value={team} onChange={setTeam} seen={seenWl} />
         <span className="rep-rounds">ฐานข้อมูล {rows.length.toLocaleString()} WO · อัปเดต {new Date(synced).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} {new Date(synced).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</span>
       </div>
 
@@ -119,14 +118,14 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
           <OpenChart days={series} name="คงค้าง" />
         </div>
         <div>
-          <div className="rep-sub">แยกตามทีม · {dLabel(range[0])} – {dLabel(range[1])}</div>
+          <div className="rep-sub">แยกตาม WO_Worklocation · {dLabel(range[0])} – {dLabel(range[1])}</div>
           <div className="rep-table-wrap">
             <table className="rep-table">
-              <thead><tr><th>ทีม</th><th>เปิดงาน</th><th>ปิดงาน</th><th>% ปิด</th><th>คงค้าง</th><th>รออะไหล่</th><th>รอเริ่ม</th></tr></thead>
+              <thead><tr><th>WO_Worklocation</th><th>เปิดงาน</th><th>ปิดงาน</th><th>% ปิด</th><th>คงค้าง</th><th>รออะไหล่</th><th>รอเริ่ม</th></tr></thead>
               <tbody>
                 {byTeam.map((x) => (
                   <tr key={x.k} className={team === x.k ? 'is-on' : ''} onClick={() => setTeam(team === x.k ? '' : x.k)}>
-                    <th>{x.label}</th><td>{x.opened}</td><td>{x.closed}</td><td>{pct(x.closed, x.opened)}%</td><td><b>{x.backlogEnd}</b></td><td>{x.material}</td><td>{x.waiting}</td>
+                    <th>{x.label} <span className="muted">{x.team}</span></th><td>{x.opened}</td><td>{x.closed}</td><td>{pct(x.closed, x.opened)}%</td><td><b>{x.backlogEnd}</b></td><td>{x.material}</td><td>{x.waiting}</td>
                   </tr>
                 ))}
               </tbody>

@@ -422,6 +422,8 @@ a { color: oklch(0.5 0.17 255); }
 .rep { display: flex; flex-direction: column; }
 .rep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--font-body); }
 .rep-select { border: 0; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: white; }
+.rep-wl { border: 1px solid var(--line); padding: 7px 14px; min-width: 220px; cursor: pointer; }
+.rep-wl-note { font-size: 12px; }
 .rep-copy { padding: 6px 14px; font-size: 13px; }
 .rep-empty { margin: 0; padding: 16px 18px; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
 .rep-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 18px 0; }
