@@ -4,8 +4,8 @@ import { pd, thD } from '../lib/dates.js';
 
 // Daily CMMS performance: what was new / started / finished / closed on a day, the open backlog by team,
 // a 14-day trend, the oldest open WOs and a text summary to forward on LINE.
-const START = 'oklch(0.55 0.15 255)';
-const CLOSE = 'oklch(0.62 0.16 150)';
+export const START = 'oklch(0.55 0.15 255)';
+export const CLOSE = 'oklch(0.62 0.16 150)';
 const LINE = 'oklch(0.45 0.06 258)';
 
 const hm = (s) => { const d = new Date(s); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -36,7 +36,8 @@ function Tile({ label, value, sub, tone }) {
 }
 
 // Grouped bars, Start vs CLOSED per day (one scale, counts).
-function FlowChart({ days, onPick, W = 560 }) {
+// Also used by the yearly history report (labels/names overridable; `label` on an item replaces the date).
+export function FlowChart({ days, onPick, W = 560, names = ['เริ่มงาน', 'CLOSED', 'คงค้าง'] }) {
   const [hover, setHover] = useState(null);
   const H = 190, L = 30, R = 8, T = 12, B = 26;
   const max = Math.max(4, ...days.flatMap((d) => [d.started, d.closed]));
@@ -72,11 +73,11 @@ function FlowChart({ days, onPick, W = 560 }) {
                 </>
               )}
               {(days.length <= 10 || (days.length - 1 - i) % 2 === 0) && (
-                <text x={cx} y={H - 8} fontSize="11" textAnchor="middle" fill="oklch(0.45 0.04 258)">{dayLabel(d.date)}</text>
+                <text x={cx} y={H - 8} fontSize="11" textAnchor="middle" fill="oklch(0.45 0.04 258)">{d.label || dayLabel(d.date)}</text>
               )}
               <rect
                 x={L + band * i} y={T} width={band} height={H - T - B + 4} fill="transparent"
-                onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onClick={() => onPick(d.date)}
+                onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onClick={() => onPick?.(d.date)}
                 style={{ cursor: 'pointer' }}
               />
             </g>
@@ -85,10 +86,10 @@ function FlowChart({ days, onPick, W = 560 }) {
       </svg>
       {h && (
         <div className="rep-tip" style={{ left: `${((L + band * hover + band / 2) / W) * 100}%` }}>
-          <b>{dayLabel(h.date)}</b>
-          <span><i style={{ background: START }} />เริ่มงาน {h.started}</span>
-          <span><i style={{ background: CLOSE }} />CLOSED {h.closed}</span>
-          <span className="muted">คงค้าง {h.open}</span>
+          <b>{h.label || dayLabel(h.date)}</b>
+          <span><i style={{ background: START }} />{names[0]} {h.started}</span>
+          <span><i style={{ background: CLOSE }} />{names[1]} {h.closed}</span>
+          <span className="muted">{names[2]} {h.open}</span>
         </div>
       )}
     </div>
@@ -96,9 +97,9 @@ function FlowChart({ days, onPick, W = 560 }) {
 }
 
 // Open backlog per day (its own chart: different scale from the daily flow).
-function OpenChart({ days, W = 560 }) {
+export function OpenChart({ days, W = 560, name = 'คงค้าง' }) {
   const [hover, setHover] = useState(null);
-  const H = 120, L = 34, R = 10, T = 12, B = 22;
+  const H = 124, L = 34, R = 10, T = 20, B = 22;
   const vals = days.map((d) => d.open);
   const lo = Math.max(0, Math.min(...vals) - 5), hi = Math.max(...vals) + 5;
   const x = (i) => L + (days.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (days.length - 1));
@@ -128,9 +129,9 @@ function OpenChart({ days, W = 560 }) {
       </svg>
       {h && (
         <div className="rep-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
-          <b>{dayLabel(h.date)}</b>
-          <span>คงค้าง {h.open} WO</span>
-          <span className="muted">ค้างเกิน 30 วัน {h.old}</span>
+          <b>{h.label || dayLabel(h.date)}</b>
+          <span>{name} {h.open} WO</span>
+          {h.old != null && <span className="muted">ค้างเกิน 30 วัน {h.old}</span>}
         </div>
       )}
     </div>

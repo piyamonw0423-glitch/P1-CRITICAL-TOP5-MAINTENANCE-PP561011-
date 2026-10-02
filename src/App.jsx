@@ -13,11 +13,12 @@ import { readLocalBackup, useDashboardStore } from './lib/store.js';
 import { buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
 import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
-import { jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
+import { histRowsFrom, jobFromWo, normWo, parseBacklogWorkbook } from './lib/cmms.js';
 import { findDuplicates } from './lib/dedupe.js';
 import DuplicatesDialog from './components/Duplicates.jsx';
 import { BulkDeleteDialog, SelectBar } from './components/Selection.jsx';
 import DailyReport from './components/Report.jsx';
+import HistoryReport, { HistUploadDialog } from './components/HistoryReport.jsx';
 
 // The selected view lives in ?view= so a filtered dashboard can be bookmarked or shared.
 const readView = () => {
@@ -56,6 +57,7 @@ export default function App() {
   const [askKey, setAskKey] = useState(false);
   const [excel, setExcel] = useState(null); // { fileName, parsed } while previewing an Excel import
   const [backlogUp, setBacklogUp] = useState(null); // { fileName, parsed } while previewing a CMMS upload
+  const [histUp, setHistUp] = useState(null); // { fileName, rows, skipped } while previewing a history import
   const [backlogFocus, setBacklogFocus] = useState(null); // { plant, n } to open the WO list on one plant
   const [dedupe, setDedupe] = useState(null); // duplicate groups while the remove-duplicates dialog is open
   const [dedupeProg, setDedupeProg] = useState(null); // { done, total, error? } while deleting duplicates
@@ -221,6 +223,16 @@ export default function App() {
     }
   };
 
+  // Yearly history export (all statuses, CLOSE included): same CMMS layout as the daily file.
+  const uploadHistoryFile = async (f) => {
+    try {
+      const parsed = await parseBacklogWorkbook(f);
+      setHistUp({ fileName: f.name, rows: histRowsFrom(parsed.rows), skipped: parsed.skipped });
+    } catch (e) {
+      setToast({ text: `อ่านไฟล์ประวัติไม่ได้: ${e?.message || 'รูปแบบไฟล์ไม่ถูกต้อง'}`, error: true });
+    }
+  };
+
   // Add a CMMS WO to Top 5: prefill the job form (the plant limit and password still apply).
   const trackWo = (row) => {
     const existing = data.jobs.find((j) => j.wo && normWo(j.wo) === normWo(row.wo));
@@ -297,6 +309,7 @@ export default function App() {
       />
       {editMode && <EditBar shared={store.shared} onExportExcel={exportExcel} onExport={exportData} onImportFile={importFile} onUploadBacklog={uploadBacklogFile} onReset={resetData}
         dupeCount={dupeGroups.reduce((n, g) => n + g.remove.length, 0)} onDedupe={() => setDedupe(dupeGroups)}
+        onUploadHistory={store.uploadHistory ? uploadHistoryFile : null}
         onTestLine={store.line ? () => run(() => store.testLine(), 'ส่งข้อความทดสอบเข้า LINE แล้ว') : null} />}
 
       <main className="main">
@@ -360,6 +373,8 @@ export default function App() {
                 </section>
               ))}
             </div>
+
+            <HistoryReport wohist={store.wohist} ids={view.ids} today={t} plantLabel={view.filter.label} edit={editMode} onImport={() => document.getElementById('hist-file')?.click()} />
 
             <DailyReport stats={store.stats} backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
 
@@ -431,6 +446,18 @@ export default function App() {
             const lineNote = { sent: ' · ส่งสรุปเข้า LINE แล้ว', failed: ' · ส่ง LINE ไม่สำเร็จ (ตรวจ token/LINE_TO)' };
             await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows, ...(baseline ? { baseline } : {}) }), (res) => msg + (lineNote[res?.line] || ''));
             setBacklogUp(null);
+          }}
+        />
+      )}
+      {histUp && (
+        <HistUploadDialog
+          {...histUp}
+          current={store.wohist}
+          busy={busy}
+          onCancel={() => setHistUp(null)}
+          onConfirm={async () => {
+            await run(() => store.uploadHistory({ fileName: histUp.fileName, rows: histUp.rows }), `นำเข้าฐานข้อมูลประวัติแล้ว · ${histUp.rows.length.toLocaleString()} WO`);
+            setHistUp(null);
           }}
         />
       )}

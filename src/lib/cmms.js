@@ -13,7 +13,7 @@ export const STATUS_GROUPS = [
   { key: 'inprg', label: 'กำลังดำเนินการ', codes: ['APPR', 'INPRG'], color: 'oklch(0.75 0.15 80)' },
   { key: 'rework', label: 'งานซ่อมซ้ำ', codes: ['REWORK'], color: 'oklch(0.6 0.21 25)' },
   { key: 'finish', label: 'เสร็จ/รอปิด', codes: ['FINISH', 'WACCEPT', 'COMP'], color: 'oklch(0.62 0.16 150)' },
-  { key: 'closed', label: 'ปิดแล้ว', codes: ['CLOSED'], color: 'oklch(0.5 0.08 150)' },
+  { key: 'closed', label: 'ปิดแล้ว', codes: ['CLOSED', 'CLOSE'], color: 'oklch(0.5 0.08 150)' },
   { key: 'other', label: 'อื่นๆ', codes: [], color: 'oklch(0.7 0.02 258)' },
 ];
 const GROUP_BY_CODE = Object.fromEntries(STATUS_GROUPS.flatMap((g) => g.codes.map((c) => [c, g])));
@@ -342,4 +342,78 @@ export const dateFromFileName = (name) => {
   const dt = new Date(y, Number(m[2]) - 1, Number(m[1]));
   return dt.getDate() === Number(m[1]) ? iso(dt) : null;
 };
+
+/* ---------------- work-order history (yearly base data + daily updates) ---------------- */
+
+/**
+ * Compact history rows from a parsed CMMS export of every P1 WO of the year (all statuses, CLOSE included):
+ * { wo, plant, team, status, as: Actual Start, af: Actual Finish, ts: Target Start, desc }.
+ */
+export const histRowsFrom = (rows) => rows.map((r) => ({
+  wo: r.wo, plant: r.plant, team: r.team || teamOf(r.workLoc), status: r.status,
+  as: r.actualStart || null, af: r.actualFinish || null, ts: r.targetStart || null, desc: String(r.desc || '').slice(0, 90),
+}));
+
+const histClosed = (h) => groupOf(h.status).key === 'closed';
+
+/**
+ * Bring the history up to date with a daily CMMS file (present rows only): new WOs are added, open WOs take the
+ * file's status and dates, and — the export drops closed WOs — an open WO missing from the file is closed on
+ * `day` (af = day, est = true). A WO the history already has as closed stays closed (an older file cannot reopen it).
+ */
+export function applyDailyToHist(hist, dailyRows, day) {
+  const latest = latestSeen(dailyRows);
+  const present = dailyRows.filter((r) => presentIn(r, latest));
+  const byWo = new Map(present.map((r) => [normWo(r.wo), r]));
+  const out = [];
+  const seen = new Set();
+  let added = 0, updated = 0, closed = 0;
+  for (const h of hist) {
+    const key = normWo(h.wo);
+    seen.add(key);
+    const d = byWo.get(key);
+    if (histClosed(h)) { out.push(h); continue; }
+    if (d) {
+      const next = { ...h, status: d.status, team: d.team || h.team, as: d.actualStart || h.as, af: d.actualFinish || h.af, ts: d.targetStart || h.ts };
+      if (next.status !== h.status || next.as !== h.as || next.af !== h.af) updated++;
+      out.push(next);
+    } else {
+      closed++;
+      out.push({ ...h, status: 'CLOSE', af: h.af || day, est: true });
+    }
+  }
+  for (const [key, d] of byWo) {
+    if (seen.has(key)) continue;
+    added++;
+    out.push(histRowsFrom([d])[0]);
+  }
+  return { rows: out, added, updated, closed };
+}
+
+/**
+ * Performance from the history for plants `ids` (and optionally one team) between `from` and `to` (YYYY-MM-DD):
+ * opened = Actual Start in range, closed = closed with Actual Finish in range, backlog at `to` = started on or
+ * before `to` and not closed by then; plus "now" counts: started-not-closed and waiting to start (no Actual Start).
+ */
+export function histTotals(rows, ids, from, to, team = null) {
+  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && (!team || h.team === team));
+  const t = { opened: 0, closed: 0, backlogEnd: 0, inProgress: 0, waiting: 0, finishWait: 0 };
+  for (const h of mine) {
+    const closed = histClosed(h);
+    if (h.as && h.as >= from && h.as <= to) t.opened++;
+    if (closed && h.af && h.af >= from && h.af <= to) t.closed++;
+    if (h.as && h.as <= to && !(closed && h.af && h.af <= to)) t.backlogEnd++;
+    if (!closed) {
+      if (!h.as) t.waiting++;
+      else if (groupOf(h.status).key === 'finish') t.finishWait++;
+      else t.inProgress++;
+    }
+  }
+  return t;
+}
+
+/** Opened / closed / backlog per bucket: [{ key, label, from, to, opened, closed, backlogEnd }]. */
+export function histSeries(rows, ids, buckets, team = null) {
+  return buckets.map((b) => ({ ...b, ...histTotals(rows, ids, b.from, b.to, team) }));
+}
 

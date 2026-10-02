@@ -3,7 +3,7 @@
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
 import { iso } from '../src/lib/dates.js';
-import { baselineStats, dayEvents, foldDayStats, openSnapshot, teamOf } from '../src/lib/cmms.js';
+import { applyDailyToHist, baselineStats, dayEvents, foldDayStats, openSnapshot, teamOf } from '../src/lib/cmms.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,6 +47,30 @@ function cleanBacklog(rows) {
     out.team = teamOf(out.workLoc); // derived here, never trusted from the browser
     for (const f of ['seenAt', 'changedAt']) out[f] = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(r[f]) ? r[f] : null;
     return out;
+  });
+}
+
+// Work-order history (every P1 WO of the year, CLOSE included), one document; updated by each daily upload.
+const MAX_HIST = 30000;
+function cleanHist(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw bad('history file has no work orders');
+  if (rows.length > MAX_HIST) throw bad(`history is limited to ${MAX_HIST} work orders`);
+  const seen = new Set();
+  return rows.filter((r) => {
+    const k = String(r?.wo ?? '').replace(/\s+/g, '').toUpperCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).map((r) => {
+    const wo = String(r.wo).trim();
+    if (!WO_RE.test(wo)) throw bad(`invalid work order "${wo.slice(0, 40)}"`);
+    const plant = Number(r.plant);
+    if (!PLANT_IDS.includes(plant)) throw bad(`invalid plant for ${wo}`);
+    const d = (v) => (DATE_RE.test(v) ? v : null);
+    return {
+      wo, plant, team: String(r.team || 'OTHER').slice(0, 12), status: String(r.status || '').toUpperCase().slice(0, 30),
+      as: d(r.as), af: d(r.af), ts: d(r.ts), desc: String(r.desc || '').slice(0, 90), ...(r.est ? { est: true } : {}),
+    };
   });
 }
 
@@ -142,6 +166,14 @@ export function createDb(conn) {
     await put(c, 'jobs', job.id, job);
   };
 
+  // Keep the yearly history in step with a daily CMMS file (no-op until a history has been imported).
+  const syncHist = async (c, rows, day) => {
+    const h = (await c.query("SELECT data FROM docs WHERE collection = 'wohist' AND id = 'current'")).rows[0]?.data;
+    if (!h) return;
+    const r = applyDailyToHist(h.rows || [], rows, day);
+    await put(c, 'wohist', 'current', { ...h, rows: r.rows, syncedAt: new Date().toISOString() });
+  };
+
   return {
     async init() {
       await conn.query(SCHEMA);
@@ -195,6 +227,7 @@ export function createDb(conn) {
         updatedAt: meta?.data.updatedAt || null,
         updatedBy: meta?.data.updatedBy || null,
         backlogAt: (await conn.query("SELECT data->>'uploadedAt' AS at FROM docs WHERE collection = 'backlog' AND id = 'current'")).rows[0]?.at || null,
+        wohistAt: (await conn.query("SELECT COALESCE(data->>'syncedAt', data->>'uploadedAt') AS at FROM docs WHERE collection = 'wohist' AND id = 'current'")).rows[0]?.at || null,
       };
     },
 
@@ -262,6 +295,17 @@ export function createDb(conn) {
       });
     },
 
+    async wohist() {
+      const r = await conn.query("SELECT data FROM docs WHERE collection = 'wohist' AND id = 'current'");
+      return r.rows[0]?.data || null;
+    },
+
+    saveWohist(body, by) {
+      const rows = cleanHist(body?.rows);
+      const doc = { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows };
+      return tx(async (c) => { await put(c, 'wohist', 'current', doc); await stamp(c, by); });
+    },
+
     async backlog() {
       const r = await conn.query("SELECT data FROM docs WHERE collection = 'backlog' AND id = 'current'");
       return r.rows[0]?.data || null;
@@ -277,6 +321,7 @@ export function createDb(conn) {
         const oldest = iso(new Date(bangkokToday().getTime() - 60 * 864e5));
         if (base > today || base < oldest) throw bad('invalid baseline date');
         return tx(async (c) => {
+          await syncHist(c, rows, iso(bangkokToday()));
           await c.query("DELETE FROM docs WHERE collection = 'stats'");
           await put(c, 'stats', base, baselineStats(rows, base, doc.uploadedAt, doc.fileName));
           await put(c, 'backlog', 'current', doc);
@@ -291,6 +336,7 @@ export function createDb(conn) {
         const old = (await c.query("SELECT data FROM docs WHERE collection = 'stats' AND id = $1", [day])).rows[0]?.data;
         const stats = foldDayStats(old, { day, events: dayEvents(prev?.rows, rows, day), snapshot: openSnapshot(rows, t), at: doc.uploadedAt, fileName: doc.fileName });
         await put(c, 'stats', day, stats);
+        await syncHist(c, rows, day);
         await put(c, 'backlog', 'current', doc);
         await stamp(c, by);
       });

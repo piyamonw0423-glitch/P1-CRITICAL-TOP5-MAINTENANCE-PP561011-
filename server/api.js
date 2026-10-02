@@ -61,6 +61,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
     }
     if (method === 'GET' && path === '/api/backlog') return ok(await db.backlog());
     if (method === 'GET' && path === '/api/stats') return ok({ days: await db.stats() });
+    if (method === 'GET' && path === '/api/wohist') return ok(await db.wohist());
     if (method === 'GET' && path === '/api/state') return ok(await db.state());
     if (method === 'GET' && path === '/api/version') return ok(await db.version());
     if (method === 'GET' && m?.[1] === 'photos') {
@@ -79,6 +80,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
       if (method === 'DELETE' && m?.[1] === 'jobs') { await db.deleteJob(id, by); return ok(); }
       if (method === 'PUT' && m?.[1] === 'plants') { await db.saveImpact(id, body?.impact, by); return ok(); }
       if (method === 'POST' && path === '/api/import') { await db.importData(body, by); return ok(); }
+      if (method === 'PUT' && path === '/api/wohist') { await db.saveWohist(body, by); return ok(); }
       if (method === 'POST' && path === '/api/line/test') {
         if (!lineConfigured(env)) return fail(400, 'line_not_configured');
         try {

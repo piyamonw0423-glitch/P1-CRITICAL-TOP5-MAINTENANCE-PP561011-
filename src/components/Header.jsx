@@ -35,7 +35,7 @@ export function Header({ now, updatedAt, updatedBy, editMode, canEdit, readOnly,
   );
 }
 
-export function EditBar({ shared, dupeCount = 0, onExportExcel, onExport, onImportFile, onUploadBacklog, onDedupe, onTestLine, onReset }) {
+export function EditBar({ shared, dupeCount = 0, onExportExcel, onExport, onImportFile, onUploadBacklog, onUploadHistory, onDedupe, onTestLine, onReset }) {
   const fileRef = useRef(null);
   const backlogRef = useRef(null);
   return (
@@ -58,6 +58,12 @@ export function EditBar({ shared, dupeCount = 0, onExportExcel, onExport, onImpo
         />
         <button type="button" className="pill-btn" onClick={onExport} title="รวมรูปหน้างาน ใช้กู้คืนข้อมูลทั้งหมด"><span className="ico"><Icon name="download" /></span>{shared ? 'สำรองข้อมูล (.json)' : 'ส่งออกไฟล์ (แชร์ทีม)'}</button>
         <button type="button" className="pill-btn" onClick={onDedupe} title="รวมงาน Top 5 ที่เลข WO ซ้ำกันให้เหลืองานเดียว">ลบงานซ้ำ{dupeCount > 0 && <span className="count">{dupeCount}</span>}</button>
+        {onUploadHistory && (
+          <>
+            <button type="button" className="pill-btn" onClick={() => document.getElementById('hist-file')?.click()} title="ไฟล์ CMMS ของ WO P1 ทั้งปี (ทุกสถานะ รวม CLOSE) ใช้คำนวณผลงานสะสม">นำเข้าฐานข้อมูลประวัติ</button>
+            <input id="hist-file" type="file" accept=".xlsx" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onUploadHistory(f); }} />
+          </>
+        )}
         {onTestLine && <button type="button" className="pill-btn" onClick={onTestLine} title="ส่งสรุปล่าสุดเข้า LINE ของผู้ดูแลเพื่อทดสอบ">ทดสอบส่ง LINE</button>}
         {onReset && <button type="button" className="pill-btn is-danger" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button>}
         <input

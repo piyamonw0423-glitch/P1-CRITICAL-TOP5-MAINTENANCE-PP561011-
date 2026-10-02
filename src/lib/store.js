@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
 import { iso, today0 } from './dates.js';
 import { sameWo } from './dedupe.js';
-import { baselineStats, dayEvents, foldDayStats, openSnapshot } from './cmms.js';
+import { applyDailyToHist, baselineStats, dayEvents, foldDayStats, openSnapshot } from './cmms.js';
 
 // Fold one CMMS upload into today's performance document (same rules as the server's saveBacklog).
 const statsAfterUpload = (prevRows, rows, old, fileName, at) => {
@@ -102,6 +102,8 @@ function useApiStore() {
   const [problem, setProblem] = useState('');
   const [backlog, setBacklog] = useState(null); // CMMS WO snapshot, fetched only when backlogAt changes
   const [stats, setStats] = useState([]); // daily performance docs, refreshed with the backlog
+  const [wohist, setWohist] = useState(null); // yearly WO history, fetched when wohistAt changes
+  const wohistAtRef = useRef(undefined);
   const versionRef = useRef(null);
   const backlogAtRef = useRef(undefined);
 
@@ -112,6 +114,11 @@ function useApiStore() {
     versionRef.current = d.updatedAt;
     setData(d);
     setStatus('ready');
+    if (d.wohistAt !== wohistAtRef.current) {
+      wohistAtRef.current = d.wohistAt;
+      if (!d.wohistAt) setWohist(null);
+      else fetchT('api/wohist', { cache: 'no-store' }).then((b) => (b.ok ? b.json() : null)).then((b) => b && setWohist(b)).catch(() => {});
+    }
     if (d.backlogAt !== backlogAtRef.current) {
       backlogAtRef.current = d.backlogAt;
       if (!d.backlogAt) setBacklog(null);
@@ -199,6 +206,8 @@ function useApiStore() {
     data,
     backlog,
     stats,
+    wohist,
+    uploadHistory: (b) => send('PUT', 'api/wohist', b),
     uploadBacklog: (b) => send('PUT', 'api/backlog', b),
     line: !!me.line, // LINE notifications configured on the server
     testLine: () => send('POST', 'api/line/test'),
@@ -231,12 +240,15 @@ function useApiStore() {
 const BACKLOG_KEY = 'p1dash.backlog';
 const readBacklog = () => { try { return JSON.parse(localStorage.getItem(BACKLOG_KEY)); } catch { return null; } };
 const STATS_KEY = 'p1dash.stats';
+const HIST_KEY = 'p1dash.wohist';
+const readHist = () => { try { return JSON.parse(localStorage.getItem(HIST_KEY)); } catch { return null; } };
 const readStats = () => { try { return JSON.parse(localStorage.getItem(STATS_KEY)) || []; } catch { return []; } };
 
 function useLocalStore() {
   const [data, setData] = useState(loadData);
   const [backlog, setBacklog] = useState(readBacklog);
   const [stats, setStats] = useState(readStats);
+  const [wohist, setWohist] = useState(readHist);
   const commit = (next) => {
     const { next: saved, ok } = commitData(next);
     setData(saved);
@@ -249,6 +261,12 @@ function useLocalStore() {
     data,
     backlog,
     stats,
+    wohist,
+    uploadHistory: async ({ fileName, rows }) => {
+      const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(doc)); } catch { throw new StoreError('quota_exceeded'); }
+      setWohist(doc);
+    },
     uploadBacklog: async ({ fileName, rows, baseline }) => {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
       // A baseline restarts the report from this file; otherwise fold the upload into today's stats.
@@ -258,12 +276,15 @@ function useLocalStore() {
           const day = statsAfterUpload(backlog?.rows, rows, stats.find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
           return stats.filter((x) => x.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date)).slice(-120);
         })();
+      const nextHist = wohist ? { ...wohist, rows: applyDailyToHist(wohist.rows, rows, iso(today0())).rows, syncedAt: doc.uploadedAt } : null;
       try {
         localStorage.setItem(BACKLOG_KEY, JSON.stringify(doc));
         localStorage.setItem(STATS_KEY, JSON.stringify(nextStats));
+        if (nextHist) localStorage.setItem(HIST_KEY, JSON.stringify(nextHist));
       } catch { throw new StoreError('quota_exceeded'); }
       setBacklog(doc);
       setStats(nextStats);
+      if (nextHist) setWohist(nextHist);
     },
     whoUpdated: '',
     saveJob: async (job) => {
