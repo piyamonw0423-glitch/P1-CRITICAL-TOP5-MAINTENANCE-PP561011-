@@ -422,12 +422,14 @@ export default function App() {
           today={t}
           busy={busy}
           onCancel={() => setBacklogUp(null)}
-          onConfirm={async (merge) => {
-            const msg = store.backlog
+          onConfirm={async (merge, baseline) => {
+            const msg = baseline
+              ? `ตั้ง Baseline วันที่ ${baseline} แล้ว · ${merge.rows.length} WO · ไฟล์ถัดไปจะเทียบกับไฟล์นี้`
+              : store.backlog
               ? `อัปเดต WO Backlog แล้ว · ใหม่ ${merge.added} · สถานะเปลี่ยน ${merge.changed.length}${merge.removed ? ` · ลบ ${merge.removed}` : ''}`
               : `อัปโหลด WO Backlog แล้ว · ${merge.rows.length} WO`;
             const lineNote = { sent: ' · ส่งสรุปเข้า LINE แล้ว', failed: ' · ส่ง LINE ไม่สำเร็จ (ตรวจ token/LINE_TO)' };
-            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows }), (res) => msg + (lineNote[res?.line] || ''));
+            await run(() => store.uploadBacklog({ fileName: backlogUp.fileName, rows: merge.rows, ...(baseline ? { baseline } : {}) }), (res) => msg + (lineNote[res?.line] || ''));
             setBacklogUp(null);
           }}
         />

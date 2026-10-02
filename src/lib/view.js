@@ -1,12 +1,12 @@
 import { BLOCK, DONE, DOING, FILTERS, GROUPS, LISTS, PLANT_IDS, PLANT_META, STATUS, STUCK, TOP_N, bucket, counts, listOf } from './data.js';
 import { daysBetween, iso, pd, range, thD } from './dates.js';
-import { groupOf, isClosedGroup, kpiBucket, normWo, summarize } from './cmms.js';
+import { effGroup, isClosedGroup, kpiBucket, latestSeen, normWo, summarize } from './cmms.js';
 
 const pctOf = (n, total) => Math.round((n / (total || 1)) * 100);
 
 export const filterFor = (k) => FILTERS.find((x) => x.k === k) || FILTERS[0];
 
-function jobRow(j, i, pid, t, cmmsIdx) {
+function jobRow(j, i, pid, t, cmmsIdx, latest) {
   const b = bucket(j, t);
   const days = daysBetween(t, pd(j.end));
   const bl = BLOCK[j.blocker] || BLOCK.none;
@@ -17,7 +17,8 @@ function jobRow(j, i, pid, t, cmmsIdx) {
   const timeColor = j.status === 'done' ? 'oklch(0.5 0.15 150)' : days <= 0 ? 'oklch(0.55 0.21 25)' : days <= 2 ? 'oklch(0.55 0.13 70)' : 'oklch(0.45 0.04 258)';
   // Latest CMMS status for this WO, when the backlog snapshot has it.
   const w = j.wo && cmmsIdx?.get(normWo(j.wo));
-  const cmms = w ? { status: w.status, closed: isClosedGroup(groupOf(w.status).key) } : null;
+  const g = w ? effGroup(w, latest) : null; // a WO missing from the latest CMMS file counts as closed
+  const cmms = w ? { status: g === 'closed' && w.status !== 'CLOSED' ? `${w.status} (ไม่พบในไฟล์ล่าสุด)` : w.status, closed: isClosedGroup(g) } : null;
   return {
     cmms,
     job: j,
@@ -40,6 +41,7 @@ function jobRow(j, i, pid, t, cmmsIdx) {
 
 export function plantView(data, pid, t, backlog = null) {
   const cmmsIdx = backlog ? new Map(backlog.rows.map((r) => [normWo(r.wo), r])) : null;
+  const latest = backlog ? latestSeen(backlog.rows) : '';
   const woRows = backlog ? backlog.rows.filter((r) => r.plant === pid) : null;
   const all = data.jobs.filter((j) => j.plant === pid);
   const c = counts(all, t);
@@ -54,8 +56,8 @@ export function plantView(data, pid, t, backlog = null) {
       ...l,
       total: jobs.length,
       openIds: open.map((j) => j.id), // current order, used by the ▲▼ buttons
-      top: top.map((j, i) => jobRow(j, i, pid, t, cmmsIdx)),
-      rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t, cmmsIdx)),
+      top: top.map((j, i) => jobRow(j, i, pid, t, cmmsIdx, latest)),
+      rest: rest.map((j, i) => jobRow(j, i + top.length, pid, t, cmmsIdx, latest)),
       more: rest.length,
       moreOpen: open.length - top.length,
       moreDone: rest.length - (open.length - top.length),
@@ -71,7 +73,7 @@ export function plantView(data, pid, t, backlog = null) {
     impact: data.plants[pid]?.impact || [],
     lists,
     jobIds: all.map((j) => j.id),
-    wo: woRows ? summarize(woRows) : null,
+    wo: woRows ? summarize(woRows, latest) : null,
   };
 }
 
@@ -112,7 +114,8 @@ export function dashboardView(data, filterKey, t, backlog = null) {
   let kpi;
   if (woRows) {
     const k = { done: 0, doing: 0, stuck: 0 };
-    woRows.forEach((r) => { k[kpiBucket(groupOf(r.status).key)]++; });
+    const latest = latestSeen(backlog.rows);
+    woRows.forEach((r) => { k[kpiBucket(effGroup(r, latest))]++; });
     const wp = (n) => pctOf(n, woRows.length);
     kpi = { source: 'cmms', total: woRows.length, plants: ids.length, top5: jobs.length, ...k, donePct: wp(k.done), doingPct: wp(k.doing), stuckPct: wp(k.stuck) };
   } else {

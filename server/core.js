@@ -3,7 +3,7 @@
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
 import { iso } from '../src/lib/dates.js';
-import { dayEvents, foldDayStats, openSnapshot, teamOf } from '../src/lib/cmms.js';
+import { baselineStats, dayEvents, foldDayStats, openSnapshot, teamOf } from '../src/lib/cmms.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -270,6 +270,19 @@ export function createDb(conn) {
     saveBacklog(body, by) {
       const rows = cleanBacklog(body?.rows);
       const doc = { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows };
+      // Baseline: restart the performance report from this file on the given day (today or up to 60 days back).
+      const base = DATE_RE.test(body?.baseline) ? body.baseline : null;
+      if (base) {
+        const today = iso(bangkokToday());
+        const oldest = iso(new Date(bangkokToday().getTime() - 60 * 864e5));
+        if (base > today || base < oldest) throw bad('invalid baseline date');
+        return tx(async (c) => {
+          await c.query("DELETE FROM docs WHERE collection = 'stats'");
+          await put(c, 'stats', base, baselineStats(rows, base, doc.uploadedAt, doc.fileName));
+          await put(c, 'backlog', 'current', doc);
+          await stamp(c, by);
+        });
+      }
       return tx(async (c) => {
         // Record the day's performance (new / started / finished / closed + open snapshot) against the previous upload.
         const prev = (await c.query("SELECT data FROM docs WHERE collection = 'backlog' AND id = 'current'")).rows[0]?.data;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
 import { iso, today0 } from './dates.js';
 import { sameWo } from './dedupe.js';
-import { dayEvents, foldDayStats, openSnapshot } from './cmms.js';
+import { baselineStats, dayEvents, foldDayStats, openSnapshot } from './cmms.js';
 
 // Fold one CMMS upload into today's performance document (same rules as the server's saveBacklog).
 const statsAfterUpload = (prevRows, rows, old, fileName, at) => {
@@ -249,10 +249,15 @@ function useLocalStore() {
     data,
     backlog,
     stats,
-    uploadBacklog: async ({ fileName, rows }) => {
+    uploadBacklog: async ({ fileName, rows, baseline }) => {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
-      const day = statsAfterUpload(backlog?.rows, rows, stats.find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
-      const nextStats = stats.filter((x) => x.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date)).slice(-120);
+      // A baseline restarts the report from this file; otherwise fold the upload into today's stats.
+      const nextStats = baseline
+        ? [baselineStats(rows, baseline, doc.uploadedAt, fileName)]
+        : (() => {
+          const day = statsAfterUpload(backlog?.rows, rows, stats.find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
+          return stats.filter((x) => x.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date)).slice(-120);
+        })();
       try {
         localStorage.setItem(BACKLOG_KEY, JSON.stringify(doc));
         localStorage.setItem(STATS_KEY, JSON.stringify(nextStats));
@@ -443,11 +448,16 @@ function useSharedStore() {
     backlog: parts.backlog || null,
     stats: parts.stats || [],
     // One document (≤ 256 KiB in the artifact store), replaced on every upload; plus stats/<day>.
-    uploadBacklog: ({ fileName, rows }) => guard(async (db) => {
+    uploadBacklog: ({ fileName, rows, baseline }) => guard(async (db) => {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
       if (JSON.stringify(doc).length > 250000) throw new StoreError('quota_exceeded');
-      const day = statsAfterUpload(partsRef.current.backlog?.rows, rows, (partsRef.current.stats || []).find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
-      await call(() => db.doc(`stats/${day.date}`).set(day));
+      if (baseline) {
+        for (const old of partsRef.current.stats || []) await call(() => db.doc(`stats/${old.date}`).delete());
+        await call(() => db.doc(`stats/${baseline}`).set(baselineStats(rows, baseline, doc.uploadedAt, fileName)));
+      } else {
+        const day = statsAfterUpload(partsRef.current.backlog?.rows, rows, (partsRef.current.stats || []).find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
+        await call(() => db.doc(`stats/${day.date}`).set(day));
+      }
       await call(() => db.doc('backlog/current').set(doc));
       await stamp(db, partsRef.current.jobs || []);
     }),

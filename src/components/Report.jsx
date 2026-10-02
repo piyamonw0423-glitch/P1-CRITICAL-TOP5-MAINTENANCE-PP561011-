@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { TEAMS, ageDays, groupOf, isClosedGroup, statTotals } from '../lib/cmms.js';
+import { TEAMS, ageDays, effGroup, isClosedGroup, latestSeen, statTotals } from '../lib/cmms.js';
 import { pd, thD } from '../lib/dates.js';
 
 // Daily CMMS performance: what was new / started / finished / closed on a day, the open backlog by team,
@@ -161,10 +161,16 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   const byTeam = teams.map((t) => ({ ...t, ...statTotals(cur, ids, t.k) }));
 
   // Oldest open WOs from the current snapshot (the "still not closed" list for team leads).
+  const latest = useMemo(() => latestSeen(backlog?.rows), [backlog]);
   const oldest = useMemo(() => (backlog?.rows || [])
-    .filter((r) => ids.includes(r.plant) && (!tm || (r.team || 'OTHER') === tm) && !isClosedGroup(groupOf(r.status).key))
+    .filter((r) => ids.includes(r.plant) && (!tm || (r.team || 'OTHER') === tm) && !isClosedGroup(effGroup(r, latest)))
     .map((r) => ({ ...r, age: ageDays(r, today) ?? 0 }))
-    .sort((a, b) => b.age - a.age), [backlog, ids, tm, today]);
+    .sort((a, b) => b.age - a.age), [backlog, ids, tm, today, latest]);
+  // WOs that dropped out of the file on this day and were counted as CLOSED — the list to check in the CMMS.
+  const byWo = useMemo(() => new Map((backlog?.rows || []).map((r) => [String(r.wo), r])), [backlog]);
+  const assumed = (cur?.assumed || [])
+    .filter(([, p, t]) => ids.includes(Number(p)) && (!tm || t === tm))
+    .map(([wo, plant, t]) => ({ wo, plant, team: t, row: byWo.get(String(wo)) }));
 
   if (!cur) {
     return (
@@ -182,9 +188,11 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
     const lines = [
       `📋 รายงาน WO P1 ${dayLabel(cur.date)} ${pd(cur.date).getFullYear() + 543} (อัปเดต ${cur.rounds.map((r) => hm(r.at)).join(', ')} น.)`,
       scope,
-      `WO ใหม่ ${tot.new} · เริ่มงาน ${tot.started} · เสร็จรอปิด ${tot.finished} · CLOSED ${tot.closed}`,
+      `WO ใหม่ ${tot.new} · เริ่มงาน ${tot.started} · เสร็จรอปิด ${tot.finished} · CLOSED ${tot.closed}${tot.assumed ? ` (ไม่พบในไฟล์ ${tot.assumed})` : ''}`,
       `คงค้าง ${tot.open} WO${openDelta != null ? ` (${signed(openDelta)} จาก ${dayLabel(prev.date)})` : ''} · ค้างเกิน 30 วัน ${tot.a90 + tot.aMore}`,
       ...(tm ? [] : byTeam.filter((t) => t.open || t.closed || t.started).map((t) => `• ${t.label}: ค้าง ${t.open} (เกิน 30 วัน ${t.a90 + t.aMore}) · เริ่ม ${t.started} · ปิด ${t.closed}`)),
+      ...(assumed.length ? ['', `ไม่พบในไฟล์ล่าสุด → นับเป็น CLOSED (โปรดตรวจใน CMMS) ${assumed.length} WO:`,
+        ...assumed.slice(0, 15).map((a) => `- ${a.wo} PP${a.plant} ${a.team} สถานะล่าสุด ${a.row?.status || '-'} – ${String(a.row?.desc || '').slice(0, 45)}`)] : []),
       '',
       'งานค้างนานสุด:',
       ...oldest.slice(0, 10).map((r, i) => `${i + 1}. ${r.wo} PP${r.plant} ${r.team || ''} ${r.age} วัน ${r.status} – ${String(r.desc || '').slice(0, 50)}`),
@@ -223,14 +231,14 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
         {[{ k: '', label: 'ทุกทีม' }, ...teams].map((t) => (
           <button key={t.k || 'all'} type="button" className={`chip${team === t.k ? ' is-on' : ''}`} onClick={() => setTeam(t.k)}>{t.label}</button>
         ))}
-        <span className="rep-rounds">อัปโหลด {cur.rounds.length} รอบ: {cur.rounds.map((r) => hm(r.at)).join(', ')} น.</span>
+        <span className="rep-rounds">{cur.baseline && <b className="rep-base">Baseline</b>} อัปโหลด {cur.rounds.length} รอบ: {cur.rounds.map((r) => hm(r.at)).join(', ')} น.</span>
       </div>
 
       <div className="rep-tiles">
         <Tile label="WO ใหม่" value={tot.new} />
         <Tile label="เริ่มงาน (Start)" value={tot.started} tone="start" />
         <Tile label="เสร็จ / รอปิด" value={tot.finished} />
-        <Tile label="CLOSED" value={tot.closed} tone="close" />
+        <Tile label="CLOSED" value={tot.closed} tone="close" sub={tot.assumed ? `รวมไม่พบในไฟล์ ${tot.assumed}` : cur.baseline ? 'วันเริ่มต้น' : undefined} />
         <Tile label="คงค้าง" value={tot.open} sub={openDelta != null ? `${signed(openDelta)} จาก ${dayLabel(prev.date)}` : 'วันแรกที่บันทึก'} tone={openDelta > 0 ? 'up' : openDelta < 0 ? 'down' : ''} />
         <Tile label="ค้างเกิน 30 วัน" value={tot.a90 + tot.aMore} sub={`เกิน 90 วัน ${tot.aMore}`} />
       </div>
@@ -259,6 +267,21 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
               </tbody>
             </table>
           </div>
+          {assumed.length > 0 && (
+            <>
+              <div className="rep-sub">ไม่พบในไฟล์ล่าสุด → นับเป็น CLOSED · {assumed.length} WO <span className="muted">(ตรวจใน CMMS ว่าปิด/ยกเลิกจริง)</span></div>
+              <ol className="rep-oldest rep-assumed">
+                {assumed.map((a) => (
+                  <li key={a.wo}>
+                    <span className="rep-wo">{a.wo}</span>
+                    <span className="muted">PP{a.plant} · {a.team} · สถานะล่าสุด {a.row?.status || '-'}{a.row?.lastSeen ? ` · เห็นล่าสุด ${dayLabel(a.row.lastSeen)}` : ''}</span>
+                    <span />
+                    <span className="rep-desc">{a.row?.desc || 'ลบออกจากรายการแล้ว'}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
           <div className="rep-sub">งานค้างนานสุด (ยังไม่ปิด) · {oldest.length} WO</div>
           <ol className="rep-oldest">
             {oldest.slice(0, 8).map((r) => (

@@ -90,9 +90,9 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
       }
       if (method === 'PUT' && path === '/api/backlog') {
         await db.saveBacklog(body, by);
-        // Summary to LINE after each upload; a LINE failure never fails the upload itself.
+        // Summary to LINE after each upload (not for a baseline); a LINE failure never fails the upload itself.
         let line = 'off';
-        if (lineConfigured(env)) {
+        if (lineConfigured(env) && !body?.baseline) {
           try {
             await linePush(env, summaryText({ days: await db.stats(2), backlog: await db.backlog(), url }));
             line = 'sent';

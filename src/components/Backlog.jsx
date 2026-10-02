@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Icon from '../lib/icons.jsx';
 import { PLANT_IDS, PLANT_META } from '../lib/data.js';
-import { pd, thD } from '../lib/dates.js';
-import { STATUS_GROUPS, ageDays, changedIn, groupOf, isClosedGroup, latestSeen, mergeBacklog, normWo, summarize } from '../lib/cmms.js';
+import { iso, pd, thD } from '../lib/dates.js';
+import { STATUS_GROUPS, ageDays, changedIn, dateFromFileName, effGroup, groupOf, isClosedGroup, latestSeen, mergeBacklog, normWo, summarize } from '../lib/cmms.js';
 
 const PAGE = 50;
 const fmtDate = (s) => (s ? `${thD(pd(s))} ${String(pd(s).getFullYear() + 543).slice(2)}` : '–');
@@ -66,11 +66,11 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
   const isMissing = (r) => !!(latest && r.seenAt && r.seenAt < latest);
   const isChanged = (r) => changedIn(r, latest);
   const scope = useMemo(() => rows.filter((r) => ids.includes(r.plant) && (plant === 'all' || r.plant === Number(plant))), [rows, ids, plant]);
-  const summary = useMemo(() => summarize(scope), [scope]);
+  const summary = useMemo(() => summarize(scope, latest), [scope, latest]);
   const list = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const out = scope.filter((r) => {
-      const g = groupOf(r.status).key;
+      const g = effGroup(r, latest); // missing from the latest file = counted as closed
       if (flag === 'changed' && !isChanged(r)) return false;
       if (flag === 'missing' && !isMissing(r)) return false;
       if (!flag && (groups.length ? !groups.includes(g) : !showClosed && isClosedGroup(g))) return false;
@@ -149,7 +149,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
                         <td>
                           <GroupChip status={r.status} />
                           {r.prevStatus && <div className={`sub${isChanged(r) ? ' is-changed' : ''}`}>เดิม {r.prevStatus} · เปลี่ยน {fmtDate(r.statusSince)}</div>}
-                          {isMissing(r) && <div className="sub is-missing">ไม่อยู่ในไฟล์ล่าสุด (เห็นล่าสุด {fmtDate(r.lastSeen)})</div>}
+                          {isMissing(r) && <div className="sub is-missing">ไม่อยู่ในไฟล์ล่าสุด → นับเป็นปิดแล้ว (เห็นล่าสุด {fmtDate(r.lastSeen)})</div>}
                         </td>
                         <td className="nowrap">{fmtDate(r.targetStart)}</td>
                         <td className={`num${r.age > 180 ? ' is-old' : ''}`}>{r.age ?? '–'}</td>
@@ -180,13 +180,18 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
 /** Preview of the merge: new WOs, status changes, unchanged and WOs no longer in the file. */
 export function BacklogUploadDialog({ fileName, parsed, current, today, busy, onConfirm, onCancel }) {
   const [removeMissing, setRemoveMissing] = useState(false);
+  // Baseline: this file becomes the report's starting point for `baseDay` (older daily stats are discarded).
+  const [baseline, setBaseline] = useState(false);
+  const [baseDay, setBaseDay] = useState(() => dateFromFileName(fileName) || iso(today));
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onCancel(); };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onCancel]);
-  const merge = useMemo(() => mergeBacklog(current, parsed.rows, today, removeMissing), [current, parsed, today, removeMissing]);
-  const perPlant = PLANT_IDS.map((p) => ({ p, s: summarize(merge.rows.filter((r) => r.plant === p)) }));
+  // A baseline replaces the snapshot exactly with this file (WOs not in it are dropped).
+  const merge = useMemo(() => mergeBacklog(current, parsed.rows, baseline && baseDay ? pd(baseDay) : today, removeMissing || baseline), [current, parsed, today, removeMissing, baseline, baseDay]);
+  const mergedLatest = latestSeen(merge.rows);
+  const perPlant = PLANT_IDS.map((p) => ({ p, s: summarize(merge.rows.filter((r) => r.plant === p), mergedLatest) }));
   const fileDupes = parsed.duplicates || 0;
 
   return (
@@ -213,7 +218,7 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
           )}
           {current && merge.missing > 0 && (
             <div className="import-errors merge-changes is-missing-list">
-              <div className="field-label">WO ที่ไม่อยู่ในไฟล์นี้ (อาจปิด/ยกเลิกแล้ว, เปลี่ยน Priority หรือหลุดจากเงื่อนไข export ของ CMMS)</div>
+              <div className="field-label">WO ที่ไม่อยู่ในไฟล์นี้ → {baseline ? 'ไม่นับ (ไฟล์นี้เป็นจุดเริ่มต้น)' : 'นับเป็น CLOSED ในรายงานวันนี้'} · ตรวจสอบใน CMMS ว่าปิด/ยกเลิกจริง หรือเปลี่ยน Priority</div>
               <ul>
                 {merge.missingRows.slice(0, 30).map((r) => (
                   <li key={r.wo}><b>{r.wo}</b> โรง {r.plant}{r.team && r.team !== 'OTHER' ? ` · ${r.team}` : ''} · สถานะล่าสุด <b>{r.status}</b> · เห็นล่าสุด {r.lastSeen || '-'} <span className="sub">{r.desc}</span></li>
@@ -222,12 +227,20 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
               </ul>
             </div>
           )}
-          {current && merge.missing > 0 && (
+          {current && merge.missing > 0 && !baseline && (
             <label className="backlog-check">
               <input type="checkbox" checked={removeMissing} onChange={(e) => setRemoveMissing(e.target.checked)} />
               ลบ {merge.missing} WO ที่ไม่อยู่ในไฟล์นี้ออก (ถ้าไม่เลือก จะเก็บไว้พร้อมป้าย "ไม่อยู่ในไฟล์ล่าสุด")
             </label>
           )}
+          <div className="baseline-box">
+            <label className="backlog-check">
+              <input type="checkbox" checked={baseline} onChange={(e) => setBaseline(e.target.checked)} />
+              ใช้ไฟล์นี้เป็น <b>จุดเริ่มต้น (Baseline)</b> ของรายงาน Performance วันที่
+            </label>
+            <input type="date" className="field field-date baseline-date" value={baseDay} max={iso(today)} disabled={!baseline} onChange={(e) => setBaseDay(e.target.value)} aria-label="วันที่ของ Baseline" />
+            {baseline && <p className="import-note is-bad">สถิติรายวันเดิมทั้งหมดจะถูกล้าง แล้วเริ่มนับใหม่จากไฟล์นี้ · WO ที่ไม่อยู่ในไฟล์นี้จะถูกลบออกจากรายการ · ไฟล์ถัดไปที่อัปโหลดจะเทียบกับไฟล์นี้</p>}
+          </div>
           <table className="upload-plants">
             <thead><tr><th>หลังอัปเดต</th><th className="num">ทั้งหมด</th><th className="num">ค้าง</th><th className="num">เสร็จ/ปิด</th></tr></thead>
             <tbody>{perPlant.map(({ p, s }) => <tr key={p}><td>โรงไฟฟ้า {p}</td><td className="num">{s.total}</td><td className="num">{s.open}</td><td className="num">{s.total - s.open}</td></tr>)}</tbody>
@@ -239,8 +252,8 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
           <div />
           <div className="modal-foot-right">
             <button type="button" className="btn btn-ghost" onClick={onCancel}>ยกเลิก</button>
-            <button type="button" className="btn btn-save" disabled={busy || merge.rows.length === 0} onClick={() => onConfirm(merge)}>
-              {busy ? 'กำลังอัปเดต…' : current ? `อัปเดต (ใหม่ ${merge.added} · เปลี่ยน ${merge.changed.length})` : `อัปโหลด ${merge.rows.length} WO`}
+            <button type="button" className="btn btn-save" disabled={busy || merge.rows.length === 0 || (baseline && !baseDay)} onClick={() => onConfirm(merge, baseline ? baseDay : null)}>
+              {busy ? 'กำลังอัปเดต…' : baseline ? `ตั้ง Baseline ${baseDay} (${merge.rows.length} WO)` : current ? `อัปเดต (ใหม่ ${merge.added} · เปลี่ยน ${merge.changed.length})` : `อัปโหลด ${merge.rows.length} WO`}
             </button>
           </div>
         </div>

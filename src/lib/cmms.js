@@ -112,11 +112,25 @@ export const ageDays = (row, today) => {
   return Math.max(0, Math.round((today - new Date(y, m - 1, d)) / 864e5));
 };
 
-/** Counts per status group for a set of rows: { total, open, byGroup: {key: n} }. */
-export function summarize(rows) {
+/** Time of the most recent upload (rows with an older seenAt were not in that file). */
+export const latestSeen = (rows) => (rows || []).reduce((m, r) => (r.seenAt && r.seenAt > m ? r.seenAt : m), '');
+/** Was this row in the latest uploaded file? Rows without seenAt (older data) count as present. */
+export const presentIn = (r, latest) => !latest || !r.seenAt || r.seenAt >= latest;
+/**
+ * Status group used for counting: a WO that dropped out of the latest CMMS file is assumed closed
+ * (team rule from 2 ต.ค. 2569); everything else uses its CMMS status.
+ */
+export const effGroup = (r, latest) => (presentIn(r, latest) ? groupOf(r.status).key : 'closed');
+
+/** Counts per status group for a set of rows: { total, open, byGroup: {key: n} }; missing WOs count as closed. */
+export function summarize(rows, latest = latestSeen(rows)) {
   const byGroup = {};
-  rows.forEach((r) => { const k = groupOf(r.status).key; byGroup[k] = (byGroup[k] || 0) + 1; });
-  const open = rows.filter((r) => !isClosedGroup(groupOf(r.status).key)).length;
+  let open = 0;
+  rows.forEach((r) => {
+    const k = effGroup(r, latest);
+    byGroup[k] = (byGroup[k] || 0) + 1;
+    if (!isClosedGroup(k)) open++;
+  });
   return { total: rows.length, open, byGroup };
 }
 
@@ -186,8 +200,6 @@ export function mergeBacklog(current, incoming, today, removeMissing = false, no
   return { rows, added, changed, unchanged, missing: leftOut.length, missingRows: leftOut, removed: removeMissing ? leftOut.length : 0 };
 }
 
-/** Time of the most recent upload (rows with an older seenAt were not in that file). */
-export const latestSeen = (rows) => rows.reduce((m, r) => (r.seenAt && r.seenAt > m ? r.seenAt : m), '');
 /** Did the latest upload change this row's status? */
 export const changedIn = (r, latest) => !!(latest && r.changedAt === latest);
 
@@ -202,14 +214,27 @@ const tuple = (r) => [r.wo, r.plant, rowTeam(r)];
  * What happened between two backlog snapshots on `day` (YYYY-MM-DD), as [wo, plant, team] lists:
  * new WOs, started (moved from waiting into APPR/INPRG/REWORK, or Actual Start = day),
  * finished (moved into FINISH/WACCEPT/COMP, or Actual Finish = day) and closed (moved into CLOSED).
+ * A WO that was in the previous file (not yet closed) but is missing from this one is assumed closed:
+ * it is counted in `closed` and also listed in `assumed` so the team can check it in the CMMS.
  * With no previous snapshot only the date columns count, so the first upload does not report every WO as new.
  */
 export function dayEvents(prevRows, nextRows, day) {
+  const prevLatest = latestSeen(prevRows);
+  const nextLatest = latestSeen(nextRows);
   const old = new Map((prevRows || []).map((r) => [normWo(r.wo), r]));
   const hasPrev = old.size > 0;
-  const ev = { new: [], started: [], finished: [], closed: [] };
-  for (const r of nextRows) {
+  const ev = { new: [], started: [], finished: [], closed: [], assumed: [] };
+  const present = nextRows.filter((r) => presentIn(r, nextLatest));
+  const presentKeys = new Set(present.map((r) => normWo(r.wo)));
+  for (const prev of old.values()) {
+    if (!presentIn(prev, prevLatest) || groupOf(prev.status).key === 'closed' || presentKeys.has(normWo(prev.wo))) continue;
+    ev.closed.push(tuple(prev));
+    ev.assumed.push(tuple(prev));
+  }
+  ev.back = []; // missing earlier, present again: undo an "assumed closed" from the same day
+  for (const r of present) {
     const prev = old.get(normWo(r.wo));
+    if (prev && !presentIn(prev, prevLatest) && groupOf(r.status).key !== 'closed') ev.back.push(normWo(r.wo));
     const g = groupOf(r.status).key;
     const pg = prev ? groupOf(prev.status).key : null;
     if (!prev && hasPrev) ev.new.push(tuple(r));
@@ -226,8 +251,9 @@ const AGE_BUCKETS = [['a7', 7], ['a30', 30], ['a90', 90], ['aMore', Infinity]];
 /** Open (not finished/closed) WOs per "plant|team" with age buckets, plus finished-waiting-to-close counts. */
 export function openSnapshot(rows, today) {
   const by = {};
+  const latest = latestSeen(rows);
   for (const r of rows) {
-    const g = groupOf(r.status).key;
+    const g = effGroup(r, latest);
     if (g === 'closed') continue;
     const k = `${r.plant}|${rowTeam(r)}`;
     const o = (by[k] ||= { open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 });
@@ -243,11 +269,18 @@ export function openSnapshot(rows, today) {
  * Fold one upload into that day's stats document. Event lists are unions by WO, so uploading at 09:30
  * and again at 16:00 never counts a WO twice; the open snapshot is the latest of the day.
  */
-export function foldDayStats(prev, { day, events, snapshot, at, fileName }) {
-  const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120) }].slice(-12) };
-  for (const k of ['new', 'started', 'finished', 'closed']) {
+const EVENT_KEYS = ['new', 'started', 'finished', 'closed', 'assumed'];
+const noEvents = () => Object.fromEntries(EVENT_KEYS.map((k) => [k, []]));
+
+export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseline = false }) {
+  const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120), ...(baseline ? { baseline: true } : {}) }].slice(-12) };
+  if (baseline || prev?.baseline) out.baseline = true;
+  const back = new Set(events.back || []);
+  for (const k of EVENT_KEYS) {
     const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
-    out[k] = [...(prev?.[k] || []), ...events[k].filter((t) => !seen.has(normWo(t[0])))].slice(0, 2000);
+    out[k] = [...(prev?.[k] || []), ...(events[k] || []).filter((t) => !seen.has(normWo(t[0])))]
+      .filter((t) => !((k === 'closed' || k === 'assumed') && back.has(normWo(t[0]))) || (events[k] || []).some((e) => normWo(e[0]) === normWo(t[0])))
+      .slice(0, 2000);
   }
   out.open = snapshot;
   return out;
@@ -256,9 +289,9 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName }) {
 /** Sum a stats document for some plants and (optionally) one team. */
 export function statTotals(doc, ids, team = null) {
   const keep = (plant, t) => ids.includes(Number(plant)) && (!team || t === team);
-  const t = { new: 0, started: 0, finished: 0, closed: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
+  const t = { new: 0, started: 0, finished: 0, closed: 0, assumed: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
-  for (const k of ['new', 'started', 'finished', 'closed']) t[k] = (doc[k] || []).filter(([, p, tm]) => keep(p, tm)).length;
+  for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([, p, tm]) => keep(p, tm)).length;
   for (const [key, o] of Object.entries(doc.open || {})) {
     const [p, tm] = key.split('|');
     if (!keep(p, tm)) continue;
@@ -266,4 +299,24 @@ export function statTotals(doc, ids, team = null) {
   }
   return t;
 }
+
+/**
+ * Starting point for the performance report: the open snapshot of `rows` on `day`, with no events.
+ * Used when a file is uploaded as the baseline (all older stats are discarded).
+ */
+export const baselineStats = (rows, day, at, fileName) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return foldDayStats(null, { day, events: noEvents(), snapshot: openSnapshot(rows, new Date(y, m - 1, d)), at, fileName, baseline: true });
+};
+
+/** "List WO Backlog P1_1.10.26.xlsx" → "2026-10-01" (day.month.year in the file name), else null. */
+export const dateFromFileName = (name) => {
+  const m = /(\d{1,2})\.(\d{1,2})\.(\d{2,4})/.exec(String(name || ''));
+  if (!m) return null;
+  let y = Number(m[3]);
+  if (y < 100) y += 2000;
+  if (y > 2400) y -= 543;
+  const dt = new Date(y, Number(m[2]) - 1, Number(m[1]));
+  return dt.getDate() === Number(m[1]) ? iso(dt) : null;
+};
 
