@@ -203,7 +203,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
       ...rounds.filter((r) => !r.baseline).map((r) => `  รอบ ${hm(r.at)} น.: เปิด ${r.new}${r.inserted ? ` (แทรก ${r.inserted})` : ''} · เริ่ม ${r.started} · เสร็จรอปิด ${r.finished} · CLOSED ${r.closed}`),
       `คงค้าง ${tot.open} WO${openDelta != null ? ` (${signed(openDelta)} จาก ${dayLabel(prev.date)})` : ''} · ค้างเกิน 30 วัน ${tot.a90 + tot.aMore}`,
       ...(tm ? [] : byTeam.filter((t) => t.open || t.closed || t.started).map((t) => `• ${t.label}: ค้าง ${t.open} (เกิน 30 วัน ${t.a90 + t.aMore}) · เริ่ม ${t.started} · ปิด ${t.closed}`)),
-      ...(fresh.length ? ['', `WO เข้าใหม่ ${fresh.length} (⚡ = แทรกระหว่างวัน):`,
+      ...(fresh.length ? ['', `WO เข้าใหม่ ${fresh.length} (⚡ แทรกระหว่างวัน = Actual Start วันนี้):`,
         ...fresh.slice(0, 15).map((f) => `${f.mid ? '⚡' : '•'} ${f.wo} PP${f.plant} ${f.team} ${f.row?.status || ''} – ${String(f.row?.desc || '').slice(0, 45)}`)] : []),
       ...(closedByStatus.length ? ['', `CLOSED (Status ใน CMMS) ${closedByStatus.length}:`,
         ...closedByStatus.slice(0, 15).map((c) => `✓ ${c.wo} PP${c.plant} ${c.team} – ${String(c.row?.desc || '').slice(0, 45)}`)] : []),
@@ -302,13 +302,13 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           )}
           {fresh.length > 0 && (
             <>
-              <div className="rep-sub">WO เข้าใหม่ · {fresh.length} WO <span className="muted">(⚡ = แทรกระหว่างวัน เข้ามาหลังการอัปโหลดรอบแรกของวัน)</span></div>
+              <div className="rep-sub">WO เข้าใหม่ · {fresh.length} WO <span className="muted">(⚡ แทรกระหว่างวัน = WO ใหม่ที่ Actual Start ตรงกับวันที่อัปโหลด)</span></div>
               <ol className="rep-oldest rep-new">
                 {fresh.map((f) => (
                   <li key={f.wo} className={f.mid ? 'is-insert' : ''}>
                     <span className="rep-age">{f.mid ? '⚡ แทรก' : 'ใหม่'}</span>
                     <span className="rep-wo">{f.wo}</span>
-                    <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'}{f.at ? ` · พบรอบ ${hm(f.at)} น.` : ''}</span>
+                    <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'} · Actual Start {f.row?.actualStart ? dayLabel(f.row.actualStart) : '—'}{f.at ? ` · พบรอบ ${hm(f.at)} น.` : ''}</span>
                     <span className="rep-desc">{f.row?.desc || ''}</span>
                   </li>
                 ))}

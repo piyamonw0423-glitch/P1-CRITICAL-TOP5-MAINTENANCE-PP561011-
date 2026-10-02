@@ -241,7 +241,8 @@ export function dayEvents(prevRows, nextRows, day) {
     if (prev && !presentIn(prev, prevLatest) && groupOf(r.status).key !== 'closed') ev.back.push(normWo(r.wo));
     const g = groupOf(r.status).key;
     const pg = prev ? groupOf(prev.status).key : null;
-    if (!prev && hasPrev) ev.new.push(tuple(r));
+    // New in the file; the 4th field marks "inserted during the day" = its Actual Start is the upload day itself.
+    if (!prev && hasPrev) ev.new.push([...tuple(r), r.actualStart === day ? 1 : 0]);
     const moved = prev && prev.status !== r.status;
     if ((moved && !DOING_OR_DONE.has(pg) && WORKING.has(g)) || (r.actualStart === day && prev?.actualStart !== day)) ev.started.push(tuple(r));
     if ((moved && g === 'finish' && !isClosedGroup(pg)) || (r.actualFinish === day && prev?.actualFinish !== day && !isClosedGroup(pg))) ev.finished.push(tuple(r));
@@ -280,10 +281,10 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120), ...(baseline ? { baseline: true } : {}) }].slice(-12) };
   if (baseline || prev?.baseline) out.baseline = true;
   const back = new Set(events.back || []);
-  // Every event carries [wo, plant, team, upload time, 1 if after the day's first upload]; for new WOs that
-  // flag means "inserted during the day" (it was not in the morning file).
+  // Every event carries [wo, plant, team, upload time, flag]. For new WOs the flag means "inserted during the day"
+  // (team rule: a new WO whose Actual Start is the upload day); for other events it marks a later upload of the day.
   const midday = (prev?.rounds || []).length > 0 ? 1 : 0;
-  const tagged = Object.fromEntries(EVENT_KEYS.map((k) => [k, (events[k] || []).map((t) => [t[0], t[1], t[2], at, midday])]));
+  const tagged = Object.fromEntries(EVENT_KEYS.map((k) => [k, (events[k] || []).map((t) => [t[0], t[1], t[2], at, k === 'new' ? (t[3] === 1 ? 1 : 0) : midday])]));
   for (const k of EVENT_KEYS) {
     const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
     out[k] = [...(prev?.[k] || []), ...(tagged[k] || []).filter((t) => !seen.has(normWo(t[0])))]
