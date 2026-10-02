@@ -346,11 +346,17 @@ export const dateFromFileName = (name) => {
 
 /* ---------------- work-order history (yearly base data + daily updates) ---------------- */
 
-/** Latest date found in rows (Actual Start/Finish, Target Start) — how current a file or the history is. */
-export const latestDateIn = (rows) => rows.reduce((m, r) => {
-  for (const d of [r.as, r.af, r.ts, r.actualStart, r.actualFinish, r.targetStart]) if (d && d > m) m = d;
-  return m;
-}, '');
+/**
+ * Latest Actual Start/Finish in rows, never after today (Thai time) — how current a file or the history is.
+ * Target dates are ignored: planned work can sit in the future and would block every later daily file.
+ */
+export const latestDateIn = (rows) => {
+  const cap = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  return rows.reduce((m, r) => {
+    for (const d of [r.as, r.af, r.actualStart, r.actualFinish]) if (d && d > m && d <= cap) m = d;
+    return m;
+  }, '');
+};
 
 /**
  * As-of date of a daily CMMS file: the date in its file name (e.g. "_2.10.26"), else the latest date inside it.
