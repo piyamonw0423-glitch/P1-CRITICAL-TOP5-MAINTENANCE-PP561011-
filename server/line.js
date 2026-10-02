@@ -5,8 +5,7 @@
 //   LINE_TO (secret)                    user ID(s) that receive pushes, comma-separated (U…)
 //   PUBLIC_URL (variable, optional)     link added to messages
 // Push messages count toward the LINE OA monthly quota; replies to a user's message do not.
-import { TEAMS, statTotals } from '../src/lib/cmms.js';
-import { PLANT_IDS } from '../src/lib/data.js';
+import { roundReportText } from '../src/lib/roundReport.js';
 import { TH_M, pd } from '../src/lib/dates.js';
 
 const API = (env) => env.LINE_API_BASE || 'https://api.line.me';
@@ -53,36 +52,10 @@ export async function verifyLineSignature(secret, rawBody, signature) {
 const thaiParts = (ms) => { const d = new Date(ms + 7 * 3600e3); return { h: d.getUTCHours(), m: d.getUTCMinutes() }; };
 const hm = (iso) => { const { h, m } = thaiParts(Date.parse(iso)); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
 const thaiDate = (day) => { const d = pd(day); return `${d.getDate()} ${TH_M[d.getMonth()]} ${d.getFullYear() + 543}`; };
-const shortDate = (day) => { const d = pd(day); return `${d.getDate()} ${TH_M[d.getMonth()]}`; };
-const signed = (n) => (n > 0 ? `+${n}` : String(n));
 
-/** Summary of the latest day in `days` (oldest → newest stats docs) for all plants. */
-export function summaryText({ days, backlog, url }) {
-  const cur = days.at(-1);
-  if (!cur) return `ยังไม่มีรายงาน — อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
-  const prev = days.length > 1 ? days.at(-2) : null;
-  const t = statTotals(cur, PLANT_IDS);
-  const p = prev ? statTotals(prev, PLANT_IDS) : null;
-  const teams = TEAMS.map((tm) => [tm.label, statTotals(cur, PLANT_IDS, tm.k).open]).filter(([, n]) => n > 0);
-  const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));
-  const fresh = [...(cur.new || [])].sort((a, b) => (b[4] || 0) - (a[4] || 0)).slice(0, 8)
-    .map(([wo, plant, team, , mid]) => `${mid === 1 ? '⚡' : '•'} ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`);
-  const missingSet = new Set((cur.assumed || []).map((x) => String(x[0])));
-  const closedByStatus = (cur.closed || []).filter((x) => !missingSet.has(String(x[0])));
-  const round = cur.rounds?.at(-1)?.at;
-  return [
-    `📋 รายงาน WO P1 · ${thaiDate(cur.date)}${round ? ` · รอบ ${hm(round)} น.` : ''}`,
-    `เปิดงาน ${t.new}${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''} · เริ่มงาน ${t.started} · เสร็จรอปิด ${t.finished} · CLOSED ${t.closed}${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} (สะสมทั้งวัน)`,
-    `คงค้าง ${t.open} WO${p ? ` (${signed(t.open - p.open)} จาก ${shortDate(prev.date)})` : ''} · เกิน 30 วัน ${t.a90 + t.aMore}`,
-    teams.map(([l, n]) => `${l} ${n}`).join(' · '),
-    ...(closedByStatus.length ? ['', `✅ CLOSED (Status) ${closedByStatus.length} WO`, ...closedByStatus.slice(0, 8).map(([wo, plant, team]) => `• ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`), ...(closedByStatus.length > 8 ? [`…และอีก ${closedByStatus.length - 8} รายการ`] : [])] : []),
-    ...(fresh.length ? ['', `🆕 WO เข้าใหม่ ${t.new} รายการ${t.inserted ? ` (⚡ แทรกระหว่างวัน ${t.inserted})` : ''}`, ...fresh, ...(t.new > fresh.length ? [`…และอีก ${t.new - fresh.length} รายการ`] : [])] : []),
-    ...((cur.assumed || []).length ? ['', `✅ CLOSED (ไม่พบในไฟล์ล่าสุด) ${cur.assumed.length} WO`,
-      ...cur.assumed.slice(0, 8).map(([wo, plant, team]) => `• ${wo} PP${plant} ${team} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`),
-      ...(cur.assumed.length > 8 ? [`…และอีก ${cur.assumed.length - 8} รายการ`] : [])] : []),
-    ...(url ? ['', `🔗 ${url}`] : []),
-  ].join('\n');
-}
+/** Round report (09:30 start / 16:30 end of work) of the latest day in `days` (oldest → newest stats docs), per plant. */
+export const summaryText = ({ days, backlog, url }) =>
+  roundReportText({ cur: days.at(-1), prev: days.length > 1 ? days.at(-2) : null, backlog, url });
 
 const HELP = 'พิมพ์ "สรุป" เพื่อดูรายงาน WO P1 ล่าสุด · พิมพ์ "id" เพื่อดูรหัสผู้ใช้ LINE ของคุณ (ใช้ตั้งค่า LINE_TO)';
 
@@ -110,7 +83,7 @@ export async function remindIfNoUpload(env, db, scheduledTime, url) {
   const last = (await db.backlog())?.uploadedAt;
   if (last && Date.parse(last) >= since) return 'skipped';
   await linePush(env, [
-    `⏰ ยังไม่ได้อัปโหลดไฟล์ CMMS รอบ${morning ? 'เช้า (09:30)' : 'บ่าย (16:00)'} วันนี้`,
+    `⏰ ยังไม่ได้อัปโหลดไฟล์ CMMS รอบ${morning ? 'เช้า 09:30 น. (เริ่มงาน)' : 'เย็น 16:30 น. (จบงาน)'} วันนี้`,
     `อัปโหลดล่าสุด: ${last ? `${thaiDate(new Date(Date.parse(last) + 7 * 3600e3).toISOString().slice(0, 10))} ${hm(last)} น.` : 'ยังไม่เคย'}`,
     'รายงานประจำวันจะอัปเดตหลังอัปโหลด (โหมดแก้ไข → อัปโหลด WO Backlog)',
     ...(url ? [`🔗 ${url}`] : []),

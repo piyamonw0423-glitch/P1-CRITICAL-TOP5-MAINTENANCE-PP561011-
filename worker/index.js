@@ -102,7 +102,7 @@ export default {
     }
   },
 
-  // Cron Triggers (wrangler.jsonc): LINE reminder when the 09:30 / 16:00 CMMS upload is missing.
+  // Cron Triggers (wrangler.jsonc): LINE reminder when the 09:30 / 16:30 CMMS upload is missing.
   async scheduled(event, env, ctx) {
     if (!lineConfigured(env) || !env.DATABASE_URL) return;
     ctx.waitUntil((async () => {

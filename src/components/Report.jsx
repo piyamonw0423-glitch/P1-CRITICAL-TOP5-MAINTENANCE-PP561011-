@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TEAMS, ageDays, effGroup, isClosedGroup, latestSeen, roundTotals, statTotals } from '../lib/cmms.js';
 import { pd, thD } from '../lib/dates.js';
+import { plantNumbers, roundLabel, roundReportText } from '../lib/roundReport.js';
 
 // Daily CMMS performance: what was new / started / finished / closed on a day, the open backlog by team,
 // a 14-day trend, the oldest open WOs and a text summary to forward on LINE.
@@ -142,7 +143,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   const days = stats || [];
   const [date, setDate] = useState(null);
   const [team, setTeam] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState('');
   const narrow = useNarrow();
   const span = narrow ? 7 : 14;
   const cw = narrow ? 340 : 560;
@@ -188,7 +189,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
       <section className="panel rep" aria-label="รายงานประจำวัน">
         <div className="panel-head">รายงานประจำวัน (CMMS)</div>
         <p className="rep-empty">ระบบจะเริ่มบันทึกตัวเลข WO ใหม่ / เริ่มงาน / เสร็จรอปิด / CLOSED / คงค้าง ตั้งแต่การอัปโหลดไฟล์ CMMS ครั้งถัดไป
-          (แนะนำวันละ 2 รอบ 09:30 และ 16:00 — อัปโหลดหลายครั้งในวันเดียวไม่นับซ้ำ)</p>
+          (แนะนำวันละ 2 รอบ 09:30 (เริ่มงาน) และ 16:30 (จบงาน) — อัปโหลดหลายครั้งในวันเดียวไม่นับซ้ำ)</p>
       </section>
     );
   }
@@ -217,8 +218,9 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
     ];
     return lines.join('\n');
   };
-  const copy = async () => {
-    const text = summary();
+  const roundText = () => roundReportText({ cur, prev, backlog, ids, url: `${location.origin}${location.pathname}` });
+  const copy = async (which) => {
+    const text = which === 'round' ? roundText() : summary();
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -227,8 +229,8 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
       try { document.execCommand('copy'); } catch { /* ignore */ }
       ta.remove();
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopied(which);
+    setTimeout(() => setCopied(''), 2500);
   };
 
   return (
@@ -239,7 +241,8 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           <select className="rep-select" value={cur.date} onChange={(e) => setDate(e.target.value)} aria-label="เลือกวัน">
             {[...days].reverse().map((d) => <option key={d.date} value={d.date}>{dayLabel(d.date)} {pd(d.date).getFullYear() + 543}</option>)}
           </select>
-          <button type="button" className="btn btn-save rep-copy" onClick={copy}>{copied ? 'คัดลอกแล้ว ✓' : 'คัดลอกสรุปส่ง LINE'}</button>
+          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('round')} title="สรุปรายโรง: เปิดงาน · แทรก · เสร็จ/ปิด · คงค้าง">{copied === 'round' ? 'คัดลอกแล้ว ✓' : 'คัดลอกรายงานรอบ (ส่ง LINE)'}</button>
+          <button type="button" className="btn btn-ghost rep-copy" onClick={() => copy('detail')} title="รายการ WO ทั้งหมดของวัน">{copied === 'detail' ? 'คัดลอกแล้ว ✓' : 'คัดลอกรายละเอียด'}</button>
         </span>
       </div>
 
@@ -271,6 +274,19 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           <OpenChart days={trend} W={cw} />
         </div>
         <div>
+          <div className="rep-sub">สรุปรายโรง · {cur.rounds?.length ? roundLabel(cur.rounds.at(-1).at) : ''} <span className="muted">(ข้อมูลจาก CMMS · สะสมทั้งวัน)</span></div>
+          <div className="rep-table-wrap">
+            <table className="rep-table">
+              <thead><tr><th>โรง</th><th>เปิดงาน</th><th>⚡แทรก</th><th>เสร็จ/ปิด</th><th>คงค้าง</th><th>±เมื่อวาน</th></tr></thead>
+              <tbody>
+                {[...ids.map((id) => [`PP${id}`, plantNumbers(cur, prev, [id])]), ...(ids.length > 1 ? [['รวม', plantNumbers(cur, prev, ids)]] : [])].map(([label, n]) => (
+                  <tr key={label} className={label === 'รวม' ? 'is-total' : ''}>
+                    <th>{label}</th><td>{n.opened}</td><td>{n.inserted}</td><td title={`CLOSED ${n.closed} · เสร็จรอปิด ${n.waitClose}`}>{n.done}</td><td><b>{n.open}</b></td><td>{n.delta == null ? '—' : signed(n.delta)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="rep-sub">แยกตามทีม (WO_Worklocation) · {dayLabel(cur.date)}</div>
           <div className="rep-table-wrap">
             <table className="rep-table">

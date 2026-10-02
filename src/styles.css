@@ -449,6 +449,7 @@ a { color: oklch(0.5 0.17 255); }
 .rep-table th, .rep-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line-soft); }
 .rep-table thead th { white-space: nowrap; font-size: 12px; color: var(--muted); font-weight: 700; }
 .rep-table tbody th { text-align: left; font-weight: 700; }
+.rep-table tr.is-total th, .rep-table tr.is-total td { border-top: 2px solid var(--line); font-weight: 700; }
 .rep-table tbody tr { cursor: pointer; }
 .rep-table tbody tr:hover, .rep-table tbody tr.is-on { background: oklch(0.96 0.02 250); }
 .rep-oldest { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
