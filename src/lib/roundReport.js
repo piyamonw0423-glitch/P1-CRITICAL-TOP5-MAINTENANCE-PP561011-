@@ -30,7 +30,9 @@ export function roundReportText({ cur, prev = null, backlog = null, url = '', id
   const last = cur.rounds?.at(-1);
   const all = plantNumbers(cur, prev, ids);
   const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));
-  const inserted = (cur.new || []).filter(([, p, , , f]) => ids.includes(Number(p)) && f === 1);
+  // New WOs of the day, inserted (Actual Start = upload day) first.
+  const fresh = (cur.new || []).filter(([, p]) => ids.includes(Number(p))).sort((a, b) => (b[4] === 1) - (a[4] === 1));
+  const MAX_NEW = 20; // keeps the message well under LINE's 5,000 characters
   const line = (n) => `เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${signed(n.delta)})` : ''}`;
   return [
     `📋 สรุป WO P1 · ${last ? roundLabel(last.at) : ''}`,
@@ -41,9 +43,12 @@ export function roundReportText({ cur, prev = null, backlog = null, url = '', id
     `  (CLOSED ${all.closed} · เสร็จรอปิด ${all.waitClose})`,
     '',
     ...ids.map((id) => `🏭 PP${id}: ${line(plantNumbers(cur, prev, [id]))}`),
-    ...(inserted.length ? ['', `⚡ งานแทรกระหว่างวัน ${inserted.length} WO (Actual Start วันนี้)`,
-      ...inserted.slice(0, 10).map(([wo, p, tm]) => `• ${wo} PP${p} ${tm} – ${String(byWo.get(String(wo))?.desc || '').slice(0, 45)}`),
-      ...(inserted.length > 10 ? [`…และอีก ${inserted.length - 10} รายการ`] : [])] : []),
+    ...(fresh.length ? ['', `WO เข้าใหม่ ${fresh.length} (⚡ แทรกระหว่างวัน = Actual Start วันนี้):`,
+      ...fresh.slice(0, MAX_NEW).map(([wo, p, tm, , f]) => {
+        const r = byWo.get(String(wo));
+        return `${f === 1 ? '⚡' : '•'} ${wo} PP${p} ${tm}${r?.status ? ` ${r.status}` : ''} – ${String(r?.desc || '').slice(0, 60)}`;
+      }),
+      ...(fresh.length > MAX_NEW ? [`…และอีก ${fresh.length - MAX_NEW} รายการ (ดูในเว็บ)`] : [])] : []),
     '',
     'นับสะสมทั้งวัน · เสร็จ/ปิด = เสร็จรอปิด + CLOSED (รวมไม่พบในไฟล์ล่าสุด) · คงค้างเทียบเมื่อวาน',
     ...(url ? [`🔗 ${url}`] : []),
