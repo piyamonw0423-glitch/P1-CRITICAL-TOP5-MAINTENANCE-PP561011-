@@ -17,8 +17,8 @@ function jobRow(j, i, pid, t, cmmsIdx, latest) {
   const timeColor = j.status === 'done' ? 'oklch(0.5 0.15 150)' : days <= 0 ? 'oklch(0.55 0.21 25)' : days <= 2 ? 'oklch(0.55 0.13 70)' : 'oklch(0.45 0.04 258)';
   // Latest CMMS status for this WO, when the backlog snapshot has it.
   const w = j.wo && cmmsIdx?.get(normWo(j.wo));
-  const g = w ? effGroup(w, latest) : null; // a WO missing from the latest CMMS file counts as closed
-  const cmms = w ? { status: g === 'closed' && w.status !== 'CLOSED' ? `${w.status} (ไม่พบในไฟล์ล่าสุด)` : w.status, closed: isClosedGroup(g) } : null;
+  const g = w ? effGroup(w) : null; // CLOSED only from the CMMS Status; a WO missing from the latest file keeps its last status
+  const cmms = w ? { status: latest && w.seenAt && w.seenAt < latest ? `${w.status} (ไม่พบในไฟล์ล่าสุด)` : w.status, closed: isClosedGroup(g) } : null;
   return {
     cmms,
     job: j,
@@ -114,8 +114,7 @@ export function dashboardView(data, filterKey, t, backlog = null) {
   let kpi;
   if (woRows) {
     const k = { done: 0, doing: 0, stuck: 0 };
-    const latest = latestSeen(backlog.rows);
-    woRows.forEach((r) => { k[kpiBucket(effGroup(r, latest))]++; });
+    woRows.forEach((r) => { k[kpiBucket(effGroup(r))]++; });
     const wp = (n) => pctOf(n, woRows.length);
     kpi = { source: 'cmms', total: woRows.length, plants: ids.length, top5: jobs.length, ...k, donePct: wp(k.done), doingPct: wp(k.doing), stuckPct: wp(k.stuck) };
   } else {
