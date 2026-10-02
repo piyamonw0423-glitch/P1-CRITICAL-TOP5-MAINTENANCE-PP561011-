@@ -68,7 +68,7 @@ function cleanHist(rows) {
     if (!PLANT_IDS.includes(plant)) throw bad(`invalid plant for ${wo}`);
     const d = (v) => (DATE_RE.test(v) ? v : null);
     return {
-      wo, plant, team: String(r.team || 'OTHER').slice(0, 12), status: String(r.status || '').toUpperCase().slice(0, 30),
+      wo, plant, wl: String(r.wl || '').slice(0, 20), team: r.wl ? teamOf(r.wl) : String(r.team || 'OTHER').slice(0, 12), status: String(r.status || '').toUpperCase().slice(0, 30),
       as: d(r.as), af: d(r.af), ts: d(r.ts), desc: String(r.desc || '').slice(0, 90), ...(r.est ? { est: true } : {}),
     };
   });

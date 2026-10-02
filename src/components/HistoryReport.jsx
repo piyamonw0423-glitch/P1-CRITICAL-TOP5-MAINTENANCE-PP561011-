@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { TEAMS, histSeries, histTotals } from '../lib/cmms.js';
+import { TEAMS, histSeries, histTeam, histTotals } from '../lib/cmms.js';
 import { TH_M, iso } from '../lib/dates.js';
 import { CLOSE, FlowChart, OpenChart, START } from './Report.jsx';
 
@@ -69,7 +69,7 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
 
   const tot = histTotals(rows, ids, range[0], range[1], tm);
   const series = histSeries(rows, ids, buckets, tm).map((b) => ({ date: b.date, label: b.label, started: b.opened, closed: b.closed, open: b.backlogEnd }));
-  const teams = TEAMS.filter((x) => x.k !== 'OTHER' || rows.some((h) => h.team === 'OTHER' && ids.includes(Number(h.plant))));
+  const teams = TEAMS.filter((x) => x.k !== 'OTHER' || rows.some((h) => histTeam(h) === 'OTHER' && ids.includes(Number(h.plant))));
   const byTeam = teams.map((x) => ({ ...x, ...histTotals(rows, ids, range[0], range[1], x.k) }));
   const months = Array.from({ length: today.getMonth() + 1 }, (_, m) => {
     const from = iso(new Date(year, m, 1));
@@ -162,7 +162,7 @@ export function HistUploadDialog({ fileName, rows, skipped, current, busy, onCon
     return { p, total: r.length, closed: r.filter((h) => /^CLOSE/.test(h.status)).length, started: r.filter((h) => h.as).length };
   });
   const ass = rows.map((h) => h.as).filter(Boolean).sort();
-  const other = rows.filter((h) => h.team === 'OTHER').length;
+  const other = rows.filter((h) => histTeam(h) === 'OTHER').length;
   return (
     <div className="overlay overlay-top" onClick={onCancel}>
       <div className="modal" role="dialog" aria-modal="true" aria-label="นำเข้าฐานข้อมูลประวัติ" onClick={(e) => e.stopPropagation()}>

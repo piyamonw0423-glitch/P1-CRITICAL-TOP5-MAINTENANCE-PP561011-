@@ -47,7 +47,7 @@ const FIELDS = {
 
 /** Maintenance teams, from the export's WO_Worklocation code (column Q). Order = display order. */
 export const TEAMS = [
-  { k: 'MECH', label: 'MECH', codes: ['WL5112'] },
+  { k: 'MECH', label: 'MECH', codes: ['WL5112', 'WL5121'] },
   { k: 'ELEC', label: 'ELEC', codes: ['WL5115'] },
   { k: 'AUTO', label: 'AUTO', codes: ['WL5118'] },
   { k: 'EMER', label: 'EMER', codes: ['WL5122', 'WL5123'] },
@@ -211,7 +211,7 @@ export const changedIn = (r, latest) => !!(latest && r.changedAt === latest);
 
 const WORKING = new Set(['inprg', 'rework']);
 const DOING_OR_DONE = new Set(['inprg', 'rework', 'finish', 'closed']);
-const rowTeam = (r) => r.team || teamOf(r.workLoc);
+const rowTeam = (r) => (r.workLoc ? teamOf(r.workLoc) : r.team || 'OTHER');
 const tuple = (r) => [r.wo, r.plant, rowTeam(r)];
 
 /**
@@ -350,7 +350,7 @@ export const dateFromFileName = (name) => {
  * { wo, plant, team, status, as: Actual Start, af: Actual Finish, ts: Target Start, desc }.
  */
 export const histRowsFrom = (rows) => rows.map((r) => ({
-  wo: r.wo, plant: r.plant, team: r.team || teamOf(r.workLoc), status: r.status,
+  wo: r.wo, plant: r.plant, wl: r.workLoc || '', team: r.workLoc ? teamOf(r.workLoc) : r.team || 'OTHER', status: r.status,
   as: r.actualStart || null, af: r.actualFinish || null, ts: r.targetStart || null, desc: String(r.desc || '').slice(0, 90),
 }));
 
@@ -374,7 +374,7 @@ export function applyDailyToHist(hist, dailyRows, day) {
     const d = byWo.get(key);
     if (histClosed(h)) { out.push(h); continue; }
     if (d) {
-      const next = { ...h, status: d.status, team: d.team || h.team, as: d.actualStart || h.as, af: d.actualFinish || h.af, ts: d.targetStart || h.ts };
+      const next = { ...h, status: d.status, wl: d.workLoc || h.wl, team: d.workLoc ? teamOf(d.workLoc) : d.team || h.team, as: d.actualStart || h.as, af: d.actualFinish || h.af, ts: d.targetStart || h.ts };
       if (next.status !== h.status || next.as !== h.as || next.af !== h.af) updated++;
       out.push(next);
     } else {
@@ -395,8 +395,11 @@ export function applyDailyToHist(hist, dailyRows, day) {
  * opened = Actual Start in range, closed = closed with Actual Finish in range, backlog at `to` = started on or
  * before `to` and not closed by then; plus "now" counts: started-not-closed and waiting to start (no Actual Start).
  */
+/** Team of a history row, re-derived from its work-location code when it has one (mapping changes apply at once). */
+export const histTeam = (h) => (h.wl ? teamOf(h.wl) : h.team || 'OTHER');
+
 export function histTotals(rows, ids, from, to, team = null) {
-  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && (!team || h.team === team));
+  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && (!team || histTeam(h) === team));
   const t = { opened: 0, closed: 0, backlogEnd: 0, inProgress: 0, waiting: 0, finishWait: 0 };
   for (const h of mine) {
     const closed = histClosed(h);
