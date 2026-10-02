@@ -36,6 +36,7 @@ app.use('/api', async (req, res) => {
     method: req.method, path: req.baseUrl + req.path, body: req.body, perm, env: process.env,
     rawBody: req.rawBody || '', signature: req.get('X-Line-Signature') || '', url: process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}/`,
   });
+  if (r.raw != null) { res.set({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).status(r.status).send(r.raw); return; }
   if (r.bytes) {
     res.set({ 'Content-Type': r.contentType, 'Cache-Control': 'private, max-age=31536000, immutable' }).status(r.status).send(Buffer.from(r.bytes));
     return;

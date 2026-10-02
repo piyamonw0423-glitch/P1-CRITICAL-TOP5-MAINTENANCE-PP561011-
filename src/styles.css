@@ -478,3 +478,5 @@ a { color: oklch(0.5 0.17 255); }
 .chip.chip-on-navy { background: oklch(1 0 0 / 0.12); border-color: transparent; color: white; padding: 3px 11px; }
 .chip.chip-on-navy.is-on { background: white; color: var(--navy); }
 .rep-table tr.rep-total th, .rep-table tr.rep-total td { border-top: 2px solid var(--line); font-weight: 700; }
+.hist .rep-tiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.rep-tile.is-material .rep-tile-sub { color: oklch(0.5 0.16 45); font-weight: 700; }

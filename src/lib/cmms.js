@@ -393,21 +393,23 @@ export function applyDailyToHist(hist, dailyRows, day) {
 /**
  * Performance from the history for plants `ids` (and optionally one team) between `from` and `to` (YYYY-MM-DD):
  * opened = Actual Start in range, closed = closed with Actual Finish in range, backlog at `to` = started on or
- * before `to` and not closed by then; plus "now" counts: started-not-closed and waiting to start (no Actual Start).
+ * before `to` and not closed by then; plus "now" counts: in progress, finished waiting to close, waiting for parts
+ * (WMATL) and waiting to start (no Actual Start).
  */
 /** Team of a history row, re-derived from its work-location code when it has one (mapping changes apply at once). */
 export const histTeam = (h) => (h.wl ? teamOf(h.wl) : h.team || 'OTHER');
 
 export function histTotals(rows, ids, from, to, team = null) {
   const mine = rows.filter((h) => ids.includes(Number(h.plant)) && (!team || histTeam(h) === team));
-  const t = { opened: 0, closed: 0, backlogEnd: 0, inProgress: 0, waiting: 0, finishWait: 0 };
+  const t = { opened: 0, closed: 0, backlogEnd: 0, inProgress: 0, waiting: 0, finishWait: 0, material: 0 };
   for (const h of mine) {
     const closed = histClosed(h);
     if (h.as && h.as >= from && h.as <= to) t.opened++;
     if (closed && h.af && h.af >= from && h.af <= to) t.closed++;
     if (h.as && h.as <= to && !(closed && h.af && h.af <= to)) t.backlogEnd++;
     if (!closed) {
-      if (!h.as) t.waiting++;
+      if (groupOf(h.status).key === 'material') t.material++; // WMATL: waiting for spare parts, with or without Actual Start
+      else if (!h.as) t.waiting++;
       else if (groupOf(h.status).key === 'finish') t.finishWait++;
       else t.inProgress++;
     }

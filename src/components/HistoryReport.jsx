@@ -103,7 +103,8 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
         <Tile label="คงค้าง (เริ่มแล้วยังไม่ปิด)" value={tot.backlogEnd.toLocaleString()} sub={`ณ ${dLabel(range[1])}`} />
         <Tile label="กำลังทำ" value={tot.inProgress} sub="ตอนนี้ · INPRG/REWORK" />
         <Tile label="เสร็จรอปิด" value={tot.finishWait} sub="ตอนนี้ · FINISH/COMP/WACCEPT" />
-        <Tile label="รอเริ่ม" value={tot.waiting} sub="ตอนนี้ · ยังไม่มี Actual Start" tone={tot.waiting ? 'up' : ''} />
+        <Tile label="รออะไหล่" value={tot.material} sub="ตอนนี้ · WMATL" tone={tot.material ? 'material' : ''} />
+        <Tile label="รอเริ่ม" value={tot.waiting} sub="ตอนนี้ · ยังไม่มี Actual Start (ไม่รวมรออะไหล่)" tone={tot.waiting ? 'up' : ''} />
       </div>
 
       <div className="rep-grid">
@@ -120,11 +121,11 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
           <div className="rep-sub">แยกตามทีม · {dLabel(range[0])} – {dLabel(range[1])}</div>
           <div className="rep-table-wrap">
             <table className="rep-table">
-              <thead><tr><th>ทีม</th><th>เปิดงาน</th><th>ปิดงาน</th><th>% ปิด</th><th>คงค้าง</th><th>รอเริ่ม</th></tr></thead>
+              <thead><tr><th>ทีม</th><th>เปิดงาน</th><th>ปิดงาน</th><th>% ปิด</th><th>คงค้าง</th><th>รออะไหล่</th><th>รอเริ่ม</th></tr></thead>
               <tbody>
                 {byTeam.map((x) => (
                   <tr key={x.k} className={team === x.k ? 'is-on' : ''} onClick={() => setTeam(team === x.k ? '' : x.k)}>
-                    <th>{x.label}</th><td>{x.opened}</td><td>{x.closed}</td><td>{pct(x.closed, x.opened)}%</td><td><b>{x.backlogEnd}</b></td><td>{x.waiting}</td>
+                    <th>{x.label}</th><td>{x.opened}</td><td>{x.closed}</td><td>{pct(x.closed, x.opened)}%</td><td><b>{x.backlogEnd}</b></td><td>{x.material}</td><td>{x.waiting}</td>
                   </tr>
                 ))}
               </tbody>

@@ -207,7 +207,20 @@ function useApiStore() {
     backlog,
     stats,
     wohist,
-    uploadHistory: (b) => send('PUT', 'api/wohist', b),
+    // Sent in parts so no single request makes the Worker handle the whole year at once.
+    uploadHistory: async ({ fileName, rows }) => {
+      const PART = 500;
+      for (let i = 0, part = 0; i < rows.length; i += PART, part++) {
+        const last = i + PART >= rows.length;
+        const r = await request('PUT', 'api/wohist', { fileName, rows: rows.slice(i, i + PART), part, last });
+        if (r.status === 401) { writeKey(''); setEditKey(''); throw new StoreError('wrong_key'); }
+        if (!r.ok) {
+          const b = await r.json().catch(() => ({}));
+          throw new StoreError(r.status === 403 ? (b.error === 'no_password' ? 'no_password' : 'read_only') : r.status === 400 ? 'bad_request' : 'unavailable', b.error, b.detail || b.error || `HTTP ${r.status}`);
+        }
+      }
+      await load().catch(() => {});
+    },
     uploadBacklog: (b) => send('PUT', 'api/backlog', b),
     line: !!me.line, // LINE notifications configured on the server
     testLine: () => send('POST', 'api/line/test'),

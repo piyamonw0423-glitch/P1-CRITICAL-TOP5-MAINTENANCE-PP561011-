@@ -61,7 +61,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
     }
     if (method === 'GET' && path === '/api/backlog') return ok(await db.backlog());
     if (method === 'GET' && path === '/api/stats') return ok({ days: await db.stats() });
-    if (method === 'GET' && path === '/api/wohist') return ok(await db.wohist());
+    if (method === 'GET' && path === '/api/wohist') return { status: 200, raw: await db.wohistText() };
     if (method === 'GET' && path === '/api/state') return ok(await db.state());
     if (method === 'GET' && path === '/api/version') return ok(await db.version());
     if (method === 'GET' && m?.[1] === 'photos') {

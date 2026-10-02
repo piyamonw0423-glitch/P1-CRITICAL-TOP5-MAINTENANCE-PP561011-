@@ -3,7 +3,7 @@
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
 import { iso } from '../src/lib/dates.js';
-import { applyDailyToHist, baselineStats, dayEvents, foldDayStats, openSnapshot, teamOf } from '../src/lib/cmms.js';
+import { baselineStats, dayEvents, foldDayStats, latestSeen, openSnapshot, presentIn, teamOf } from '../src/lib/cmms.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -51,10 +51,9 @@ function cleanBacklog(rows) {
 }
 
 // Work-order history (every P1 WO of the year, CLOSE included), one document; updated by each daily upload.
-const MAX_HIST = 30000;
 function cleanHist(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw bad('history file has no work orders');
-  if (rows.length > MAX_HIST) throw bad(`history is limited to ${MAX_HIST} work orders`);
+  if (rows.length > 2000) throw bad('send the history in parts of at most 2000 work orders');
   const seen = new Set();
   return rows.filter((r) => {
     const k = String(r?.wo ?? '').replace(/\s+/g, '').toUpperCase();
@@ -167,11 +166,32 @@ export function createDb(conn) {
   };
 
   // Keep the yearly history in step with a daily CMMS file (no-op until a history has been imported).
+  // Same rules as applyDailyToHist (cmms.js), run inside Postgres so the Worker never parses the ~0.5 MB
+  // history (Workers Free allows ~10 ms CPU per request): open WOs take the file's status and dates,
+  // new WOs are added, open WOs missing from the file close today (est), closed WOs stay closed.
   const syncHist = async (c, rows, day) => {
-    const h = (await c.query("SELECT data FROM docs WHERE collection = 'wohist' AND id = 'current'")).rows[0]?.data;
-    if (!h) return;
-    const r = applyDailyToHist(h.rows || [], rows, day);
-    await put(c, 'wohist', 'current', { ...h, rows: r.rows, syncedAt: new Date().toISOString() });
+    const latest = latestSeen(rows);
+    const daily = rows.filter((r) => presentIn(r, latest)).map((r) => ({
+      wo: r.wo, plant: r.plant, wl: r.workLoc || '', team: r.team || teamOf(r.workLoc), status: r.status,
+      as: r.actualStart || null, af: r.actualFinish || null, ts: r.targetStart || null, desc: String(r.desc || '').slice(0, 90),
+    }));
+    await c.query(`
+      WITH d AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(wo text, plant int, wl text, team text, status text, "as" text, af text, ts text, "desc" text)),
+      h AS (SELECT e, ord FROM docs, jsonb_array_elements(data->'rows') WITH ORDINALITY AS t(e, ord) WHERE collection = 'wohist' AND id = 'current'),
+      upd AS (
+        SELECT h.ord, CASE
+          WHEN upper(h.e->>'status') LIKE 'CLOSE%' THEN h.e
+          WHEN d.wo IS NOT NULL THEN h.e || jsonb_build_object('status', d.status, 'wl', COALESCE(NULLIF(d.wl, ''), h.e->>'wl'), 'team', d.team,
+            'as', COALESCE(d."as", h.e->>'as'), 'af', COALESCE(d.af, h.e->>'af'), 'ts', COALESCE(d.ts, h.e->>'ts'))
+          ELSE h.e || jsonb_build_object('status', 'CLOSE', 'af', COALESCE(h.e->>'af', $2::text), 'est', true)
+        END AS e
+        FROM h LEFT JOIN d ON upper(d.wo) = upper(h.e->>'wo')),
+      added AS (SELECT 1e9 AS ord, to_jsonb(d) AS e FROM d WHERE NOT EXISTS (SELECT 1 FROM h WHERE upper(h.e->>'wo') = upper(d.wo)))
+      UPDATE docs SET updated_at = now(), data = data || jsonb_build_object(
+        'rows', (SELECT COALESCE(jsonb_agg(e ORDER BY ord), '[]'::jsonb) FROM (SELECT ord, e FROM upd UNION ALL SELECT ord, e FROM added) z),
+        'syncedAt', $3::text)
+      WHERE collection = 'wohist' AND id = 'current'`,
+    [JSON.stringify(daily), day, new Date().toISOString()]);
   };
 
   return {
@@ -295,15 +315,25 @@ export function createDb(conn) {
       });
     },
 
-    async wohist() {
-      const r = await conn.query("SELECT data FROM docs WHERE collection = 'wohist' AND id = 'current'");
-      return r.rows[0]?.data || null;
+    /** The history as JSON text, passed straight through to the browser (no parse/stringify in the Worker). */
+    async wohistText() {
+      const r = await conn.query("SELECT data::text AS t FROM docs WHERE collection = 'wohist' AND id = 'current'");
+      return r.rows[0]?.t || 'null';
     },
 
+    /** Import in parts (the browser sends ~500 rows at a time): part 0 replaces, later parts append in SQL. */
     saveWohist(body, by) {
       const rows = cleanHist(body?.rows);
-      const doc = { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows };
-      return tx(async (c) => { await put(c, 'wohist', 'current', doc); await stamp(c, by); });
+      const part = Math.max(0, parseInt(body?.part, 10) || 0);
+      return tx(async (c) => {
+        if (part === 0) {
+          await put(c, 'wohist', 'current', { uploadedAt: new Date().toISOString(), uploadedBy: by || null, fileName: String(body?.fileName || '').slice(0, 120), rows });
+        } else {
+          const r = await c.query("UPDATE docs SET data = jsonb_set(data, '{rows}', (data->'rows') || $1::jsonb), updated_at = now() WHERE collection = 'wohist' AND id = 'current'", [JSON.stringify(rows)]);
+          if (!r.rowCount) throw bad('history import must start with part 0');
+        }
+        if (body?.last) await stamp(c, by);
+      });
     },
 
     async backlog() {

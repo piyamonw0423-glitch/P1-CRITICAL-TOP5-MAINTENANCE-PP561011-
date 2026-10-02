@@ -15,9 +15,12 @@ const json = (status, body) => new Response(JSON.stringify(body), {
   headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
 });
 // Photo ids never change content, so browsers may cache them for a long time.
-const toResponse = (r) => (r.bytes
-  ? new Response(r.bytes, { status: r.status, headers: { 'Content-Type': r.contentType, 'Cache-Control': 'private, max-age=31536000, immutable' } })
-  : json(r.status, r.json));
+const toResponse = (r) => {
+  if (r.bytes) return new Response(r.bytes, { status: r.status, headers: { 'Content-Type': r.contentType, 'Cache-Control': 'private, max-age=31536000, immutable' } });
+  // Pre-serialised JSON (large documents) goes out as is.
+  if (r.raw != null) return new Response(r.raw, { status: r.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return json(r.status, r.json);
+};
 // Reject if `promise` takes longer than `ms`; pg's own timeouts do not fire on the Workers runtime.
 const within = (promise, ms, what) => Promise.race([
   promise,
