@@ -212,6 +212,17 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
             </div>
           )}
           {current && merge.missing > 0 && (
+            <div className="import-errors merge-changes is-missing-list">
+              <div className="field-label">WO ที่ไม่อยู่ในไฟล์นี้ (อาจปิด/ยกเลิกแล้ว, เปลี่ยน Priority หรือหลุดจากเงื่อนไข export ของ CMMS)</div>
+              <ul>
+                {merge.missingRows.slice(0, 30).map((r) => (
+                  <li key={r.wo}><b>{r.wo}</b> โรง {r.plant}{r.team && r.team !== 'OTHER' ? ` · ${r.team}` : ''} · สถานะล่าสุด <b>{r.status}</b> · เห็นล่าสุด {r.lastSeen || '-'} <span className="sub">{r.desc}</span></li>
+                ))}
+                {merge.missingRows.length > 30 && <li>และอีก {merge.missingRows.length - 30} WO</li>}
+              </ul>
+            </div>
+          )}
+          {current && merge.missing > 0 && (
             <label className="backlog-check">
               <input type="checkbox" checked={removeMissing} onChange={(e) => setRemoveMissing(e.target.checked)} />
               ลบ {merge.missing} WO ที่ไม่อยู่ในไฟล์นี้ออก (ถ้าไม่เลือก จะเก็บไว้พร้อมป้าย "ไม่อยู่ในไฟล์ล่าสุด")

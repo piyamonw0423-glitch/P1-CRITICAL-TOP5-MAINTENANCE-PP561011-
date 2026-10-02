@@ -462,3 +462,4 @@ a { color: oklch(0.5 0.17 255); }
   .rep-rounds { margin-left: 0; width: 100%; }
 }
 @media (max-width: 480px) { .rep-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.merge-changes.is-missing-list { background: oklch(0.97 0.01 250); border-color: var(--line); }

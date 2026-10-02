@@ -155,7 +155,7 @@ export function jobFromWo(row, today, rank = 1) {
  * New WOs are added, changed statuses are updated (remembering the previous status and the day it
  * changed), unchanged WOs keep their history. WOs missing from the new file are kept and flagged
  * (lastSeen stays old) unless `removeMissing`.
- * Returns { rows, added, changed: [{ wo, plant, desc, from, to }], unchanged, missing, removed }.
+ * Returns { rows, added, changed: [{ wo, plant, desc, from, to }], unchanged, missing, missingRows, removed }.
  */
 export function mergeBacklog(current, incoming, today, removeMissing = false, now = new Date()) {
   const day = iso(today);
@@ -183,7 +183,7 @@ export function mergeBacklog(current, incoming, today, removeMissing = false, no
   }
   const leftOut = [...old.entries()].filter(([k]) => !seen.has(k)).map(([, r]) => r);
   if (!removeMissing) rows.push(...leftOut);
-  return { rows, added, changed, unchanged, missing: leftOut.length, removed: removeMissing ? leftOut.length : 0 };
+  return { rows, added, changed, unchanged, missing: leftOut.length, missingRows: leftOut, removed: removeMissing ? leftOut.length : 0 };
 }
 
 /** Time of the most recent upload (rows with an older seenAt were not in that file). */
