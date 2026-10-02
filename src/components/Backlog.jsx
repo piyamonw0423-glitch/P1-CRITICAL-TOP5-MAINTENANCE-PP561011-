@@ -70,7 +70,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
   const list = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const out = scope.filter((r) => {
-      const g = effGroup(r); // a WO missing from the latest file keeps its last status
+      const g = effGroup(r, latest); // missing from the latest file = closed (MISSING_IS_CLOSED)
       if (flag === 'changed' && !isChanged(r)) return false;
       if (flag === 'missing' && !isMissing(r)) return false;
       if (!flag && (groups.length ? !groups.includes(g) : !showClosed && isClosedGroup(g))) return false;
@@ -149,7 +149,7 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
                         <td>
                           <GroupChip status={r.status} />
                           {r.prevStatus && <div className={`sub${isChanged(r) ? ' is-changed' : ''}`}>เดิม {r.prevStatus} · เปลี่ยน {fmtDate(r.statusSince)}</div>}
-                          {isMissing(r) && <div className="sub is-missing">ไม่อยู่ในไฟล์ล่าสุด · ใช้สถานะล่าสุดที่เคยส่ง (เห็นล่าสุด {fmtDate(r.lastSeen)})</div>}
+                          {isMissing(r) && <div className="sub is-missing">ไม่อยู่ในไฟล์ล่าสุด = ปิดแล้ว (เห็นล่าสุด {fmtDate(r.lastSeen)})</div>}
                         </td>
                         <td className="nowrap">{fmtDate(r.targetStart)}</td>
                         <td className={`num${r.age > 180 ? ' is-old' : ''}`}>{r.age ?? '–'}</td>
@@ -227,7 +227,7 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
           )}
           {current && merge.missing > 0 && (
             <div className="import-errors merge-changes is-missing-list">
-              <div className="field-label">WO ที่ไม่อยู่ในไฟล์นี้ → {baseline ? 'จะถูกลบ (ไฟล์นี้เป็นจุดเริ่มต้น)' : 'ยังนับตามสถานะล่าสุดที่เคยส่ง (ไม่นับเป็น CLOSED)'} · ตรวจสอบใน CMMS ว่าปิด/ยกเลิกจริง หรือเปลี่ยน Priority</div>
+              <div className="field-label">WO ที่ไม่อยู่ในไฟล์นี้ → {baseline ? 'จะถูกลบ (ไฟล์นี้เป็นจุดเริ่มต้น)' : 'นับเป็น CLOSED (ไฟล์ CMMS ไม่ดึงงานที่ปิดแล้ว)'} · ตรวจสอบใน CMMS ว่าปิด/ยกเลิกจริง หรือเปลี่ยน Priority</div>
               <ul>
                 {merge.missingRows.slice(0, 30).map((r) => (
                   <li key={r.wo}><b>{r.wo}</b> โรง {r.plant}{r.team && r.team !== 'OTHER' ? ` · ${r.team}` : ''} · สถานะล่าสุด <b>{r.status}</b> · เห็นล่าสุด {r.lastSeen || '-'} <span className="sub">{r.desc}</span></li>

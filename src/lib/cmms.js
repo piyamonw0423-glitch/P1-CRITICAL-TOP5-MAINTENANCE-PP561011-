@@ -117,10 +117,12 @@ export const latestSeen = (rows) => (rows || []).reduce((m, r) => (r.seenAt && r
 /** Was this row in the latest uploaded file? Rows without seenAt (older data) count as present. */
 export const presentIn = (r, latest) => !latest || !r.seenAt || r.seenAt >= latest;
 /**
- * Status group used for counting. CLOSED comes only from the CMMS Status (column L); a WO missing from
- * the latest file keeps the last status it was sent with (team rule, 2 ต.ค. 2569) and is only flagged.
+ * Team rule (2 ต.ค. 2569): the CMMS export drops a WO once it is closed, so a WO missing from the latest
+ * file IS closed. Set to false to make missing WOs keep their last status instead (they are listed either way).
  */
-export const effGroup = (r) => groupOf(r.status).key;
+export const MISSING_IS_CLOSED = true;
+/** Status group used for counting: CMMS Status (column L), or 'closed' for a WO missing from the latest file. */
+export const effGroup = (r, latest) => (MISSING_IS_CLOSED && !presentIn(r, latest) ? 'closed' : groupOf(r.status).key);
 
 /** Counts per status group for a set of rows: { total, open, byGroup: {key: n} }. */
 export function summarize(rows, latest = latestSeen(rows)) {
@@ -217,7 +219,7 @@ const tuple = (r) => [r.wo, r.plant, rowTeam(r)];
  * new WOs, started (moved from waiting into APPR/INPRG/REWORK, or Actual Start = day),
  * finished (moved into FINISH/WACCEPT/COMP, or Actual Finish = day) and closed (moved into CLOSED).
  * A WO that was in the previous file (not yet closed) but is missing from this one is listed in `assumed`
- * ("not found in file") for checking; it is NOT counted as closed — it keeps its last known status.
+ * ("not found in file") and, with MISSING_IS_CLOSED, also counted in `closed`.
  * With no previous snapshot only the date columns count, so the first upload does not report every WO as new.
  */
 export function dayEvents(prevRows, nextRows, day) {
@@ -231,8 +233,9 @@ export function dayEvents(prevRows, nextRows, day) {
   for (const prev of old.values()) {
     if (!presentIn(prev, prevLatest) || groupOf(prev.status).key === 'closed' || presentKeys.has(normWo(prev.wo))) continue;
     ev.assumed.push(tuple(prev));
+    if (MISSING_IS_CLOSED) ev.closed.push(tuple(prev));
   }
-  ev.back = []; // missing earlier, present again: drop it from the day's "not found" list
+  ev.back = []; // missing earlier, present again: drop it from the day's "not found" (and closed) lists
   for (const r of present) {
     const prev = old.get(normWo(r.wo));
     if (prev && !presentIn(prev, prevLatest) && groupOf(r.status).key !== 'closed') ev.back.push(normWo(r.wo));
@@ -284,7 +287,7 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   for (const k of EVENT_KEYS) {
     const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
     out[k] = [...(prev?.[k] || []), ...(tagged[k] || []).filter((t) => !seen.has(normWo(t[0])))]
-      .filter((t) => !(k === 'assumed' && back.has(normWo(t[0]))) || (events[k] || []).some((e) => normWo(e[0]) === normWo(t[0])))
+      .filter((t) => !((k === 'assumed' || k === 'closed') && back.has(normWo(t[0]))) || (events[k] || []).some((e) => normWo(e[0]) === normWo(t[0])))
       .slice(0, 2000);
   }
   out.open = snapshot;
@@ -311,7 +314,7 @@ export function statTotals(doc, ids, team = null) {
   if (!doc) return t;
   for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([, p, tm]) => keep(p, tm)).length;
   t.inserted = (doc.new || []).filter(([, p, tm, , mid]) => keep(p, tm) && mid === 1).length; // came in after the day's first upload
-  t.closedStatus = t.closed; // CLOSED counts only Status (column L) changes
+  t.closedStatus = MISSING_IS_CLOSED ? t.closed - t.assumed : t.closed; // Status (column L) → CLOSED
   for (const [key, o] of Object.entries(doc.open || {})) {
     const [p, tm] = key.split('|');
     if (!keep(p, tm)) continue;
