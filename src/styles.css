@@ -476,6 +476,24 @@ a { color: oklch(0.5 0.17 255); }
 .rep-new .rep-age { color: oklch(0.5 0.15 60); }
 .rep-closed li { background: oklch(0.97 0.03 150); }
 .rep-age.is-ok { color: var(--done-ink); }
+.fold { margin-top: 12px; border: 1px solid var(--line-soft); border-radius: 12px; padding: 4px 8px 8px; }
+.fold-head { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 6px 2px; font-size: 13.5px; }
+.fold-head:focus-visible { outline: 2px solid var(--navy); border-radius: 8px; }
+.fold-caret { width: 12px; color: var(--muted); }
+.fold-count { font-weight: 700; color: var(--ink-2); }
+.fold-plants { display: flex; gap: 6px; margin-left: auto; }
+.fold-plants span { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: oklch(0.95 0.01 250); color: var(--ink-2); }
+.fold-note { font-size: 12px; margin: 0 2px 6px; }
+.rep-compact { gap: 3px; }
+.rep-compact li { grid-template-columns: auto auto auto minmax(0, 1fr); padding: 4px 8px; }
+.rep-compact .rep-desc { grid-column: auto; }
+.fold-more { all: unset; cursor: pointer; display: block; margin: 6px auto 0; font-size: 12.5px; font-weight: 700; color: var(--navy); padding: 4px 12px; border-radius: 999px; }
+.fold-more:hover { background: oklch(0.95 0.01 250); }
+@media (max-width: 600px) {
+  .rep-compact li { grid-template-columns: auto auto minmax(0, 1fr); }
+  .rep-compact .rep-desc { grid-column: 1 / -1; }
+  .fold-plants { margin-left: 0; }
+}
 .merge-changes.is-new-list { background: oklch(0.97 0.03 150); }
 .merge-changes li.is-closed { color: var(--done-ink); }
 .chip.chip-on-navy { background: oklch(1 0 0 / 0.12); border-color: transparent; color: white; padding: 3px 11px; }

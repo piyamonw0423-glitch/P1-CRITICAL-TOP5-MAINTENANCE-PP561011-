@@ -27,6 +27,35 @@ function useNarrow() {
 }
 const signed = (n) => (n > 0 ? `+${n}` : String(n));
 
+// A WO list that stays short: a one-line header (count + per-plant counts) that folds open,
+// then compact one-line rows, the first few only until "ดูทั้งหมด".
+const FOLD_FIRST = 5;
+function FoldList({ title, note, items, tone = '', render, startOpen = false }) {
+  const [open, setOpen] = useState(startOpen);
+  const [all, setAll] = useState(false);
+  if (!items.length) return null;
+  const perPlant = [5, 10, 6, 11].map((p) => [p, items.filter((x) => Number(x.plant) === p).length]).filter(([, n]) => n);
+  const shown = all ? items : items.slice(0, FOLD_FIRST);
+  return (
+    <div className="fold">
+      <button type="button" className="fold-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="fold-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+        <b>{title}</b> <span className="fold-count">{items.length} WO</span>
+        <span className="fold-plants">{perPlant.map(([p, n]) => <span key={p}>PP{p} {n}</span>)}</span>
+      </button>
+      {open && (
+        <>
+          {note && <div className="fold-note muted">{note}</div>}
+          <ol className={`rep-oldest rep-compact ${tone}`}>{shown.map(render)}</ol>
+          {items.length > FOLD_FIRST && (
+            <button type="button" className="fold-more" onClick={() => setAll(!all)}>{all ? 'ย่อ' : `ดูทั้งหมด ${items.length} WO`}</button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Tile({ label, value, sub, tone }) {
   return (
     <div className={`rep-tile${tone ? ` is-${tone}` : ''}`}>
@@ -324,62 +353,42 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
               </div>
             </>
           )}
-          {fresh.length > 0 && (
-            <>
-              <div className="rep-sub">WO เข้าใหม่ · {fresh.length} WO <span className="muted">(⚡ แทรกระหว่างวัน = WO ใหม่ที่ Actual Start ตรงกับวันที่อัปโหลด)</span></div>
-              <ol className="rep-oldest rep-new">
-                {fresh.map((f) => (
-                  <li key={f.wo} className={f.mid ? 'is-insert' : ''}>
-                    <span className="rep-age">{f.mid ? '⚡ แทรก' : 'ใหม่'}</span>
-                    <span className="rep-wo">{f.wo}</span>
-                    <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'} · Actual Start {f.row?.actualStart ? dayLabel(f.row.actualStart) : '—'}{f.at ? ` · พบรอบ ${hm(f.at)} น.` : ''}</span>
-                    <span className="rep-desc">{f.row?.desc || ''}</span>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-          {closedByStatus.length > 0 && (
-            <>
-              <div className="rep-sub">CLOSED · Status ในไฟล์ (คอลัมน์ L) · {closedByStatus.length} WO</div>
-              <ol className="rep-oldest rep-closed">
-                {closedByStatus.map((c) => (
-                  <li key={c.wo}>
-                    <span className="rep-age is-ok">✓ CLOSED</span>
-                    <span className="rep-wo">{c.wo}</span>
-                    <span className="muted">PP{c.plant} · {c.team}{c.row?.prevStatus ? ` · เดิม ${c.row.prevStatus}` : ''}</span>
-                    <span className="rep-desc">{c.row?.desc || ''}</span>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-          {assumed.length > 0 && (
-            <>
-              <div className="rep-sub">CLOSED · ไม่พบในไฟล์ล่าสุด · {assumed.length} WO <span className="muted">(ไฟล์ CMMS ไม่ดึงงานที่ปิดแล้ว)</span></div>
-              <ol className="rep-oldest rep-assumed">
-                {assumed.map((a) => (
-                  <li key={a.wo}>
-                    <span className="rep-wo">{a.wo}</span>
-                    <span className="muted">PP{a.plant} · {a.team} · สถานะล่าสุด {a.row?.status || '-'}{a.row?.lastSeen ? ` · เห็นล่าสุด ${dayLabel(a.row.lastSeen)}` : ''}</span>
-                    <span />
-                    <span className="rep-desc">{a.row?.desc || 'ลบออกจากรายการแล้ว'}</span>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-          <div className="rep-sub">งานค้างนานสุด (ยังไม่ปิด) · {oldest.length} WO</div>
-          <ol className="rep-oldest">
-            {oldest.slice(0, 8).map((r) => (
-              <li key={r.wo}>
+          <FoldList key={`n${cur.date}`} title="WO เข้าใหม่" note="⚡ แทรกระหว่างวัน = Actual Start ตรงกับวันที่อัปโหลด" items={fresh} tone="rep-new" startOpen
+            render={(f) => (
+              <li key={f.wo} className={f.mid ? 'is-insert' : ''} title={f.row?.desc || ''}>
+                <span className="rep-age">{f.mid ? '⚡ แทรก' : 'ใหม่'}</span>
+                <span className="rep-wo">{f.wo}</span>
+                <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'}{f.row?.actualStart ? ` · AS ${dayLabel(f.row.actualStart)}` : ''}</span>
+                <span className="rep-desc">{f.row?.desc || ''}</span>
+              </li>
+            )} />
+          <FoldList key={`c${cur.date}`} title="CLOSED · Status ในไฟล์ (คอลัมน์ L)" items={closedByStatus} tone="rep-closed"
+            render={(c) => (
+              <li key={c.wo} title={c.row?.desc || ''}>
+                <span className="rep-age is-ok">✓</span>
+                <span className="rep-wo">{c.wo}</span>
+                <span className="muted">PP{c.plant} · {c.team}{c.row?.prevStatus ? ` · เดิม ${c.row.prevStatus}` : ''}</span>
+                <span className="rep-desc">{c.row?.desc || ''}</span>
+              </li>
+            )} />
+          <FoldList key={`a${cur.date}`} title="CLOSED · ไม่พบในไฟล์ล่าสุด" note="ไฟล์ CMMS ไม่ดึงงานที่ปิดแล้ว" items={assumed} tone="rep-assumed"
+            render={(a) => (
+              <li key={a.wo} title={a.row?.desc || ''}>
+                <span className="rep-age is-ok">✓</span>
+                <span className="rep-wo">{a.wo}</span>
+                <span className="muted">PP{a.plant} · {a.team} · ล่าสุด {a.row?.status || '-'}{a.row?.lastSeen ? ` · เห็น ${dayLabel(a.row.lastSeen)}` : ''}</span>
+                <span className="rep-desc">{a.row?.desc || 'ลบออกจากรายการแล้ว'}</span>
+              </li>
+            )} />
+          <FoldList key={`o${cur.date}`} title="งานค้างนานสุด (ยังไม่ปิด)" items={oldest} startOpen
+            render={(r) => (
+              <li key={r.wo} title={r.desc || ''}>
                 <span className="rep-age">{r.age} วัน</span>
                 <span className="rep-wo">{r.wo}</span>
                 <span className="muted">PP{r.plant} · {r.team || '-'} · {r.status}</span>
                 <span className="rep-desc">{r.desc}</span>
               </li>
-            ))}
-          </ol>
+            )} />
         </div>
       </div>
     </section>
