@@ -10,6 +10,7 @@ import { FILTERS, MAX_JOBS_PER_PLANT, listOf } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
 import { readLocalBackup, useDashboardStore } from './lib/store.js';
+import BacklogDashboard, { PageTabs } from './components/BacklogDashboard.jsx';
 import { buildBacklogWorkbook, buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
 import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
@@ -213,6 +214,14 @@ export default function App() {
     }
   };
 
+  // Two pages without a router: the Top 5 dashboard and the WO Backlog summary (#wo-dashboard, linkable).
+  const [page, setPage] = useState(() => (typeof location !== 'undefined' && location.hash === '#wo-dashboard' ? 'wo' : 'main'));
+  const goPage = (p) => {
+    setPage(p);
+    try { history.replaceState(null, '', p === 'wo' ? '#wo-dashboard' : location.pathname + location.search); } catch { /* sandboxed */ }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const exportExcel = async () => {
     try {
       await saveFile(`P1-dashboard-${iso(t)}.xlsx`, await buildWorkbook(data));
@@ -346,63 +355,84 @@ export default function App() {
 
         {ready && !empty && (
           <>
+            <PageTabs page={page} onChange={goPage} />
             <FilterSelect value={filter} color={view.color} onChange={setFilter} />
+            {page === 'wo' ? (
+              <>
+                <BacklogDashboard backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label}
+                  onUpload={editMode ? () => document.getElementById('backlog-file')?.click() : null} />
+                <BacklogPanel
+                  backlog={store.backlog}
+                  ids={view.ids}
+                  edit={editMode}
+                  tracked={trackedWos}
+                  today={t}
+                  focus={backlogFocus}
+                  onTrack={trackWo}
+                  onUpload={() => document.getElementById('backlog-file')?.click()}
+                  onDownload={downloadBacklog}
+                />
+              </>
+            ) : (
+              <>
 
-            <div className="summary">
-              <KpiRow kpi={view.kpi} />
-              <Highlights items={view.highlights} />
-            </div>
+              <div className="summary">
+                <KpiRow kpi={view.kpi} />
+                <Highlights items={view.highlights} />
+              </div>
 
-            <div className="groups">
-              {view.groups.map((g) => (
-                <section key={g.k} className="group">
-                  <div className="group-head">
-                    <h2 className="group-title">{g.title}</h2>
-                    <span className="group-note">{g.note}</span>
-                  </div>
-                  <div className="group-plants">
-                    {g.plants.map((p) => (
-                      <PlantCard
-                        key={p.id}
-                        p={p}
-                        edit={editMode}
-                        flashId={flashId}
-                        selected={selected}
-                        onSelect={selectJobs}
-                        onEditJob={(job) => setModal({ type: 'job', job })}
-                        onAddJob={(list) => openNew(p.id, list)}
-                        onTrackDaily={(row) => trackWo(row, 'daily')}
-                        onReorder={(ids) => { if (!busy) run(() => store.reorderJobs(ids), 'จัดอันดับแล้ว'); }}
-                        onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
-                        onPhoto={setLightbox}
-                        onOpenBacklog={(plant) => setBacklogFocus({ plant, n: Date.now() })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
+              <div className="groups">
+                {view.groups.map((g) => (
+                  <section key={g.k} className="group">
+                    <div className="group-head">
+                      <h2 className="group-title">{g.title}</h2>
+                      <span className="group-note">{g.note}</span>
+                    </div>
+                    <div className="group-plants">
+                      {g.plants.map((p) => (
+                        <PlantCard
+                          key={p.id}
+                          p={p}
+                          edit={editMode}
+                          flashId={flashId}
+                          selected={selected}
+                          onSelect={selectJobs}
+                          onEditJob={(job) => setModal({ type: 'job', job })}
+                          onAddJob={(list) => openNew(p.id, list)}
+                          onTrackDaily={(row) => trackWo(row, 'daily')}
+                          onReorder={(ids) => { if (!busy) run(() => store.reorderJobs(ids), 'จัดอันดับแล้ว'); }}
+                          onEditImpact={() => setModal({ type: 'plant', pid: p.id })}
+                          onPhoto={setLightbox}
+                          onOpenBacklog={(plant) => setBacklogFocus({ plant, n: Date.now() })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
 
-            <HistoryReport wohist={store.wohist} ids={view.ids} today={t} plantLabel={view.filter.label} edit={editMode} onImport={() => document.getElementById('hist-file')?.click()} />
+              <HistoryReport wohist={store.wohist} ids={view.ids} today={t} plantLabel={view.filter.label} edit={editMode} onImport={() => document.getElementById('hist-file')?.click()} />
 
-            <DailyReport stats={store.stats} backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
+              <DailyReport stats={store.stats} backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
 
-            <BacklogPanel
-              backlog={store.backlog}
-              ids={view.ids}
-              edit={editMode}
-              tracked={trackedWos}
-              today={t}
-              focus={backlogFocus}
-              onTrack={trackWo}
-              onUpload={() => document.getElementById('backlog-file')?.click()}
-              onDownload={downloadBacklog}
-            />
+              <BacklogPanel
+                backlog={store.backlog}
+                ids={view.ids}
+                edit={editMode}
+                tracked={trackedWos}
+                today={t}
+                focus={backlogFocus}
+                onTrack={trackWo}
+                onUpload={() => document.getElementById('backlog-file')?.click()}
+                onDownload={downloadBacklog}
+              />
 
-            <div className="insights">
-              <BlockerSummary items={view.blockers} scopeLabel={scopeLabel} />
-              <TrendPanel hist={view.history} />
-            </div>
+              <div className="insights">
+                <BlockerSummary items={view.blockers} scopeLabel={scopeLabel} />
+                <TrendPanel hist={view.history} />
+              </div>
+              </>
+            )}
           </>
         )}
       </main>
