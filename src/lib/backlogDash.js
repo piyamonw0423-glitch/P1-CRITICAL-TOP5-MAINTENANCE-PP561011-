@@ -41,6 +41,7 @@ export function backlogDashboard(rows, ids, today) {
   const bands = AGE_BANDS.map((b) => ({ ...b, ...summary(open.filter((r) => r.age >= b.from && r.age <= b.to)) }));
   const plants = PLANT_IDS.filter((p) => ids.includes(p)).map((p) => ({ plant: p, ...summary(open.filter((r) => Number(r.plant) === p)) }));
   const matrix = teams.map((t) => ({ team: t, cells: groups.map((g) => open.filter((r) => r.tm === t.k && r.g === g.key).length) }));
+  const plantMatrix = plants.map((p) => ({ plant: p.plant, cells: groups.map((g) => open.filter((r) => Number(r.plant) === p.plant && r.g === g.key).length) }));
 
   const byApprover = new Map();
   for (const r of open) {
@@ -48,7 +49,7 @@ export function backlogDashboard(rows, ids, today) {
     (byApprover.get(name) || byApprover.set(name, []).get(name)).push(r);
   }
   const approvers = [...byApprover.entries()]
-    .map(([name, list]) => ({ name, ...summary(list), over365: list.filter((r) => r.age > 365).length }))
+    .map(([name, list]) => ({ name, ...summary(list), over365: list.filter((r) => r.age > 365).length, over180: list.filter((r) => r.age > 180).length }))
     .sort((a, b) => b.count - a.count || b.avgAge - a.avgAge)
     .slice(0, 10);
 
@@ -64,7 +65,7 @@ export function backlogDashboard(rows, ids, today) {
       value: valued.reduce((s, r) => s + Number(r.value), 0),
       valueCount: valued.length,
     },
-    groups, teams, bands, plants, matrix, approvers,
+    groups, teams, bands, plants, matrix, plantMatrix, approvers,
     oldest: [...open].sort((a, b) => b.age - a.age).slice(0, 10),
   };
 }
