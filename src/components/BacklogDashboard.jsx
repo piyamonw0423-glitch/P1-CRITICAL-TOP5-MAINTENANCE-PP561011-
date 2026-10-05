@@ -177,7 +177,7 @@ export default function BacklogDashboard({ backlog, ids, today, plantLabel, onUp
           <h2>WO Backlog <span>P1</span></h2>
           <p>สรุปงานซ่อมบำรุงที่มีความเสี่ยงสูง (Priority 1) · {plantLabel}</p>
         </div>
-        <div className="bk-hero-tag">Right Work<br />Right Priority<br />Better Reliability</div>
+        <div className="bk-hero-tag">Right Work<br />Right Priority<br />Better Decision</div>
         <div className="bk-hero-date">
           <Icon name="calendar" />
           <span>ข้อมูล ณ วันที่<b>{thaiLong(backlog.uploadedAt.slice(0, 10))}</b>{backlog.fileName && <small>{backlog.fileName}</small>}</span>
