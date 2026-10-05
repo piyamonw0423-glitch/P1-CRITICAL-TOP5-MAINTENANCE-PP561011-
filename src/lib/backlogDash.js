@@ -1,7 +1,7 @@
 // Weekly-style summary of the open WO Backlog P1 (same data as the CMMS upload): KPIs, status groups, teams,
 // aging buckets, plants, team × status matrix, next approvers and the oldest WOs. Pure — used by BacklogDashboard.
 import { PLANT_IDS } from './data.js';
-import { STATUS_GROUPS, TEAMS, ageDays, effGroup, isClosedGroup, latestSeen, teamOf } from './cmms.js';
+import { STATUS_GROUPS, TEAMS, ageDays, effGroup, isClosedGroup, isTrackedRow, latestSeen, teamOf } from './cmms.js';
 
 export const AGE_BANDS = [
   { k: 'a30', label: '0-30 วัน', from: 0, to: 30 },
@@ -22,7 +22,7 @@ const pct = (n, of) => (of ? (n / of) * 100 : 0);
  */
 export function backlogDashboard(rows, ids, today) {
   const latest = latestSeen(rows);
-  const open = (rows || [])
+  const open = (rows || []).filter(isTrackedRow)
     .map((r) => ({ ...r, g: effGroup(r, latest), age: ageDays(r, today) ?? 0, tm: r.team || teamOf(r.workLoc) }))
     .filter((r) => ids.includes(Number(r.plant)) && !isClosedGroup(r.g));
   const total = open.length;
@@ -37,7 +37,7 @@ export function backlogDashboard(rows, ids, today) {
   const teams = TEAMS.map((t) => {
     const list = open.filter((r) => r.tm === t.k);
     return { ...t, ...summary(list), over180: list.filter((r) => r.age > 180).length };
-  }).filter((t) => t.count > 0 || t.k !== 'OTHER');
+  }).filter((t) => t.k !== 'OTHER');
   const bands = AGE_BANDS.map((b) => ({ ...b, ...summary(open.filter((r) => r.age >= b.from && r.age <= b.to)) }));
   const plants = PLANT_IDS.filter((p) => ids.includes(p)).map((p) => ({ plant: p, ...summary(open.filter((r) => Number(r.plant) === p)) }));
   const matrix = teams.map((t) => ({ team: t, cells: groups.map((g) => open.filter((r) => r.tm === t.k && r.g === g.key).length) }));

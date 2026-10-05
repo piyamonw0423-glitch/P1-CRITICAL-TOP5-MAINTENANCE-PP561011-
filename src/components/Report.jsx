@@ -208,7 +208,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   // WOs that dropped out of the file on this day and were counted as CLOSED — the list to check in the CMMS.
   const rounds = roundTotals(cur, ids, tm, wlOf);
   const oldSnap = !!tm && legacySnap(cur); // older days cannot be split by work location
-  const inScope = ([wo, p, t, , , wl]) => ids.includes(Number(p)) && scopeMatch(tm, t, wl || wlOf(wo));
+  const inScope = ([wo, p, t, , , wl]) => ids.includes(Number(p)) && t !== 'OTHER' && scopeMatch(tm, t, wl || wlOf(wo));
   const toItem = ([wo, plant, t, at, mid]) => ({ wo, plant, team: t, at, mid: mid === 1, row: byWo.get(String(wo)) });
   const byInsert = (a, b) => (b.mid - a.mid) || String(a.wo).localeCompare(String(b.wo));
   // Opened on this day = Actual Start that day (⚡ = also a new WO in the file: inserted during the day).

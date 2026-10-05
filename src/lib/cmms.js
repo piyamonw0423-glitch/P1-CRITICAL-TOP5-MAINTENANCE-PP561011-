@@ -61,12 +61,17 @@ export const scopeMatch = (f, team, wl) => {
   if (Array.isArray(f)) return !f.length || f.some((x) => scopeMatch(x, team, wl)); // several WL codes / teams
   return !f || (TEAM_KEYS.has(f) ? team === f : normWl(wl) === f);
 };
-/** WO_Worklocation codes for a filter dropdown: the known team codes first, then any other code seen in the data. */
-export const wlOptions = (seen = []) => {
-  const known = TEAMS.flatMap((t) => t.codes);
-  const extra = [...new Set(seen.map(normWl).filter((c) => c && !known.includes(c)))].sort();
-  return [...known, ...extra].map((c) => ({ code: c, team: teamOf(c) }));
+/**
+ * Only the team's own work locations are tracked (team rule, 5 Oct 2026): WOs of any other WO_Worklocation
+ * (WL1220, WL1310, WL5111, …) or with none are dropped on upload and ignored in every count.
+ */
+export const TRACKED_WL = new Set(TEAMS.flatMap((t) => t.codes));
+export const isTrackedRow = (r) => {
+  const code = normWl(r?.workLoc ?? r?.wl);
+  return code ? TRACKED_WL.has(code) : !!r?.team && r.team !== 'OTHER' && TEAM_KEYS.has(r.team);
 };
+/** WO_Worklocation codes for the filter: the tracked team codes only. */
+export const wlOptions = () => [...TRACKED_WL].map((c) => ({ code: c, team: teamOf(c) }));
 const TEAM_BY_CODE = Object.fromEntries(TEAMS.flatMap((t) => t.codes.map((c) => [c, t.k])));
 /** Team key for a work-location code (also accepts a code that already carries the team name). */
 export const teamOf = (workLoc) => {
@@ -93,6 +98,7 @@ export async function parseBacklogWorkbook(file) {
     const seen = new Set();
     const rows = [];
     const skipped = {};
+    const skippedWl = {};
     const unknown = new Set();
     let dupes = 0;
     for (const r of sheet.data.slice(at + 1)) {
@@ -109,11 +115,12 @@ export async function parseBacklogWorkbook(file) {
       const row = { wo, plant, status };
       for (const f of ['desc', 'location', 'asset', 'parent', 'workType', 'nextApprove', 'owner', 'workLoc', 'supervisor']) row[f] = str(get(f), f === 'desc' ? 300 : 80);
       row.team = teamOf(row.workLoc);
+      if (!isTrackedRow(row)) { const k = normWl(row.workLoc) || '(ไม่มี WL)'; skippedWl[k] = (skippedWl[k] || 0) + 1; continue; }
       for (const f of DATE_FIELDS) row[f] = thaiDay(get(f));
       row.value = Number(get('value')) || 0;
       rows.push(row);
     }
-    return { rows, duplicates: dupes, skipped: Object.entries(skipped).map(([plant, count]) => ({ plant, count })), unknownStatuses: [...unknown] };
+    return { rows, duplicates: dupes, skipped: Object.entries(skipped).map(([plant, count]) => ({ plant, count })), skippedWl: Object.entries(skippedWl).map(([wl, count]) => ({ wl, count })), unknownStatuses: [...unknown] };
   }
   throw new Error('ไม่พบหัวคอลัมน์ "Work Order", "Status", "Plant" — ใช้ไฟล์ List of Work Orders ที่ export จาก CMMS');
 }
@@ -190,10 +197,11 @@ export function jobFromWo(row, today, rank = 1) {
 export function mergeBacklog(current, incoming, today, removeMissing = false, now = new Date()) {
   const day = iso(today);
   const seenAt = now.toISOString(); // exact upload time, so two uploads on one day stay distinguishable
-  const old = new Map((current?.rows || []).map((r) => [normWo(r.wo), r]));
+  const old = new Map((current?.rows || []).filter(isTrackedRow).map((r) => [normWo(r.wo), r]));
   const seen = new Set();
   const rows = [];
   const changed = [];
+  incoming = incoming.filter(isTrackedRow);
   let added = 0, unchanged = 0;
   const addedRows = [];
   for (const r of incoming) {
@@ -237,6 +245,8 @@ const tuple = (r) => [r.wo, r.plant, rowTeam(r), normWl(r.workLoc)];
  * With no previous snapshot only the date columns count, so the first upload does not report every WO as new.
  */
 export function dayEvents(prevRows, nextRows, day) {
+  prevRows = (prevRows || []).filter(isTrackedRow);
+  nextRows = nextRows.filter(isTrackedRow);
   const prevLatest = latestSeen(prevRows);
   const nextLatest = latestSeen(nextRows);
   const old = new Map((prevRows || []).map((r) => [normWo(r.wo), r]));
@@ -274,6 +284,7 @@ export function openSnapshot(rows, today) {
   const by = {};
   const latest = latestSeen(rows);
   for (const r of rows) {
+    if (!isTrackedRow(r)) continue;
     const g = effGroup(r, latest);
     if (g === 'closed') continue;
     const k = `${r.plant}|${rowTeam(r)}|${normWl(r.workLoc)}`;
@@ -313,7 +324,7 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
 
 /** Per upload round of a stats document: [{ at, fileName, new, inserted, started, finished, closed, missing }]. */
 export function roundTotals(doc, ids, team = null, wlOf = null) {
-  const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && scopeMatch(team, t, wl || wlOf?.(wo));
+  const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && t !== 'OTHER' && scopeMatch(team, t, wl || wlOf?.(wo));
   return (doc?.rounds || []).map((r, i) => {
     const mine = (k) => (doc[k] || []).filter((t) => keep(t[1], t[2], t[0], t[5]) && (t[3] ? t[3] === r.at : i === 0));
     return {
@@ -330,7 +341,7 @@ export function roundTotals(doc, ids, team = null, wlOf = null) {
  * wlOf(wo) fills in the code for events recorded before tuples carried it.
  */
 export function statTotals(doc, ids, team = null, wlOf = null) {
-  const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && scopeMatch(team, t, wl || (wo != null ? wlOf?.(wo) : ''));
+  const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && t !== 'OTHER' && scopeMatch(team, t, wl || (wo != null ? wlOf?.(wo) : ''));
   const t = { opened: 0, new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
   for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl)).length;
@@ -389,7 +400,7 @@ export const fileAsOf = (fileName, rows) => dateFromFileName(fileName) || latest
  * Compact history rows from a parsed CMMS export of every P1 WO of the year (all statuses, CLOSE included):
  * { wo, plant, team, status, as: Actual Start, af: Actual Finish, ts: Target Start, desc }.
  */
-export const histRowsFrom = (rows) => rows.map((r) => ({
+export const histRowsFrom = (rows) => rows.filter(isTrackedRow).map((r) => ({
   wo: r.wo, plant: r.plant, wl: r.workLoc || '', team: r.workLoc ? teamOf(r.workLoc) : r.team || 'OTHER', status: r.status,
   as: r.actualStart || null, af: r.actualFinish || null, ts: r.targetStart || null, desc: String(r.desc || '').slice(0, 90),
 }));
@@ -402,6 +413,8 @@ const histClosed = (h) => groupOf(h.status).key === 'closed';
  * `day` (af = day, est = true). A WO the history already has as closed stays closed (an older file cannot reopen it).
  */
 export function applyDailyToHist(hist, dailyRows, day) {
+  hist = (hist || []).filter(isTrackedRow);
+  dailyRows = dailyRows.filter(isTrackedRow);
   const latest = latestSeen(dailyRows);
   const present = dailyRows.filter((r) => presentIn(r, latest));
   const byWo = new Map(present.map((r) => [normWo(r.wo), r]));
@@ -440,7 +453,7 @@ export function applyDailyToHist(hist, dailyRows, day) {
 export const histTeam = (h) => (h.wl ? teamOf(h.wl) : h.team || 'OTHER');
 
 export function histTotals(rows, ids, from, to, team = null) {
-  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && scopeMatch(team, histTeam(h), h.wl));
+  const mine = rows.filter((h) => ids.includes(Number(h.plant)) && isTrackedRow(h) && scopeMatch(team, histTeam(h), h.wl));
   const t = { opened: 0, closed: 0, backlogEnd: 0, inProgress: 0, waiting: 0, finishWait: 0, material: 0 };
   for (const h of mine) {
     const closed = histClosed(h);

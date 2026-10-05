@@ -3,7 +3,7 @@
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
 import { iso } from '../src/lib/dates.js';
-import { baselineStats, dayEvents, foldDayStats, latestSeen, openSnapshot, presentIn, teamOf } from '../src/lib/cmms.js';
+import { TRACKED_WL, baselineStats, dayEvents, foldDayStats, isTrackedRow, latestSeen, openSnapshot, presentIn, teamOf } from '../src/lib/cmms.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,7 +31,7 @@ function cleanBacklog(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw bad('backlog file has no work orders');
   if (rows.length > MAX_BACKLOG) throw bad(`backlog is limited to ${MAX_BACKLOG} work orders`);
   const seen = new Set();
-  return rows.filter((r) => { // one row per WO number
+  return rows.filter((r) => isTrackedRow({ workLoc: r?.workLoc, team: r?.team })).filter((r) => { // team's work locations only; one row per WO
     const k = String(r?.wo ?? '').replace(/\s+/g, '').toUpperCase();
     if (seen.has(k)) return false;
     seen.add(k);
@@ -55,7 +55,7 @@ function cleanHist(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw bad('history file has no work orders');
   if (rows.length > 2000) throw bad('send the history in parts of at most 2000 work orders');
   const seen = new Set();
-  return rows.filter((r) => {
+  return rows.filter((r) => isTrackedRow({ wl: r?.wl, team: r?.team })).filter((r) => {
     const k = String(r?.wo ?? '').replace(/\s+/g, '').toUpperCase();
     if (!k || seen.has(k)) return false;
     seen.add(k);
@@ -225,6 +225,18 @@ export function createDb(conn) {
           }
         }
         await put(c, 'meta', 'trim5', { at: new Date().toISOString() });
+        await stamp(c);
+      });
+      // Once: drop WOs of work locations the team does not track (WL1220, WL1310, WL5111, …) from the stored
+      // backlog and history (team rule, 5 Oct 2026). Daily stats keep them but every count ignores team OTHER.
+      await tx(async (c) => {
+        const done = await c.query("SELECT 1 FROM docs WHERE collection = 'meta' AND id = 'dropOtherWl'");
+        if (done.rowCount) return;
+        await c.query(`UPDATE docs SET updated_at = now(), data = jsonb_set(data, '{rows}', (
+            SELECT COALESCE(jsonb_agg(e), '[]'::jsonb) FROM jsonb_array_elements(data->'rows') e
+            WHERE upper(trim(COALESCE(e->>'workLoc', e->>'wl', ''))) = ANY($1::text[])))
+          WHERE collection IN ('backlog', 'wohist') AND id = 'current' AND jsonb_typeof(data->'rows') = 'array'`, [[...TRACKED_WL]]);
+        await put(c, 'meta', 'dropOtherWl', { at: new Date().toISOString() });
         await stamp(c);
       });
     },

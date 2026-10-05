@@ -14,7 +14,7 @@ import BacklogDashboard, { PageTabs } from './components/BacklogDashboard.jsx';
 import { buildBacklogWorkbook, buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
 import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
-import { fileAsOf, histRowsFrom, jobFromWo, latestDateIn, normWo, parseBacklogWorkbook } from './lib/cmms.js';
+import { fileAsOf, histRowsFrom, isTrackedRow, jobFromWo, latestDateIn, normWo, parseBacklogWorkbook } from './lib/cmms.js';
 import { findDuplicates } from './lib/dedupe.js';
 import DuplicatesDialog from './components/Duplicates.jsx';
 import { BulkDeleteDialog, SelectBar } from './components/Selection.jsx';
@@ -104,7 +104,9 @@ export default function App() {
   const t = today0();
   const tKey = iso(t);
   // Recompute when the calendar day rolls over (t is derived from tKey).
-  const view = useMemo(() => dashboardView(data, filter, t, store.backlog), [data, filter, tKey, store.backlog]);
+  // Only the team's own WO_Worklocation codes are shown (older uploads may still hold other codes until cleaned).
+  const backlog = useMemo(() => (store.backlog ? { ...store.backlog, rows: (store.backlog.rows || []).filter(isTrackedRow) } : store.backlog), [store.backlog]);
+  const view = useMemo(() => dashboardView(data, filter, t, backlog), [data, filter, tKey, backlog]);
   const dupeGroups = useMemo(() => findDuplicates(data.jobs), [data.jobs]);
   const trackedWos = useMemo(() => new Set(data.jobs.filter((j) => j.wo).map((j) => normWo(j.wo))), [data.jobs]);
 
@@ -359,10 +361,10 @@ export default function App() {
             <FilterSelect value={filter} color={view.color} onChange={setFilter} />
             {page === 'wo' ? (
               <>
-                <BacklogDashboard backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label}
+                <BacklogDashboard backlog={backlog} ids={view.ids} today={t} plantLabel={view.filter.label}
                   onUpload={editMode ? () => document.getElementById('backlog-file')?.click() : null} />
                 <BacklogPanel
-                  backlog={store.backlog}
+                  backlog={backlog}
                   ids={view.ids}
                   edit={editMode}
                   tracked={trackedWos}
@@ -413,10 +415,10 @@ export default function App() {
 
               <HistoryReport wohist={store.wohist} ids={view.ids} today={t} plantLabel={view.filter.label} edit={editMode} onImport={() => document.getElementById('hist-file')?.click()} />
 
-              <DailyReport stats={store.stats} backlog={store.backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
+              <DailyReport stats={store.stats} backlog={backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
 
               <BacklogPanel
-                backlog={store.backlog}
+                backlog={backlog}
                 ids={view.ids}
                 edit={editMode}
                 tracked={trackedWos}

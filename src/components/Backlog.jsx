@@ -262,6 +262,7 @@ export function BacklogUploadDialog({ fileName, parsed, current, today, busy, on
             <tbody>{perPlant.map(({ p, s }) => <tr key={p}><td>โรงไฟฟ้า {p}</td><td className="num">{s.total}</td><td className="num">{s.open}</td><td className="num">{s.total - s.open}</td></tr>)}</tbody>
           </table>
           {parsed.skipped.length > 0 && <p className="import-note">ข้าม WO ของโรงอื่น: {parsed.skipped.map((x) => `${x.plant} (${x.count})`).join(', ')}</p>}
+          {parsed.skippedWl?.length > 0 && <p className="import-note">ข้าม WO ที่ไม่ใช่ WO_Worklocation ของทีม (ไม่นำเข้า): {parsed.skippedWl.map((x) => `${x.wl} (${x.count})`).join(', ')}</p>}
           {parsed.unknownStatuses.length > 0 && <p className="import-note is-bad">สถานะที่ยังไม่ได้จัดกลุ่ม (จะแสดงเป็น "อื่นๆ"): {parsed.unknownStatuses.join(', ')}</p>}
         </div>
         <div className="modal-foot">

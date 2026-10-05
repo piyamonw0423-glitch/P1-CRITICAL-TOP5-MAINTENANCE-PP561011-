@@ -15,7 +15,7 @@ export const roundLabel = (isoTs) => (thai(Date.parse(isoTs)).getUTCHours() < 12
 /** Numbers for some plants: opened, inserted, finished-or-closed (unique WOs), closed, open, open change vs prev day. */
 export function plantNumbers(cur, prev, ids) {
   const t = statTotals(cur, ids);
-  const keep = ([, p]) => ids.includes(Number(p));
+  const keep = ([, p, tm]) => ids.includes(Number(p)) && tm !== 'OTHER';
   const done = new Set([...(cur?.finished || []), ...(cur?.closed || [])].filter(keep).map((x) => String(x[0])));
   return { opened: t.opened, newInFile: t.new, inserted: t.inserted, done: done.size, closed: t.closed, waitClose: t.finished, open: t.open, delta: prev ? t.open - statTotals(prev, ids).open : null };
 }
@@ -31,7 +31,7 @@ export function roundReportText({ cur, prev = null, backlog = null, url = '', id
   const all = plantNumbers(cur, prev, ids);
   const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));
   // WOs opened on the day (Actual Start = that day), inserted (also new in the file) first.
-  const fresh = (cur.opened || cur.new || []).filter(([, p]) => ids.includes(Number(p))).sort((a, b) => (b[4] === 1) - (a[4] === 1));
+  const fresh = (cur.opened || cur.new || []).filter(([, p, tm]) => ids.includes(Number(p)) && tm !== 'OTHER').sort((a, b) => (b[4] === 1) - (a[4] === 1));
   const MAX_NEW = 20; // keeps the message well under LINE's 5,000 characters
   const line = (n) => `เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${signed(n.delta)})` : ''}`;
   return [
