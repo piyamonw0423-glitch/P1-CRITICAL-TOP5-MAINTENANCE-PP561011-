@@ -11,7 +11,7 @@ import { TH_M, pd } from '../lib/dates.js';
 export function PageTabs({ page, onChange }) {
   return (
     <nav className="page-tabs" aria-label="เลือกหน้า">
-      {[['main', 'แดชบอร์ด Top 5'], ['wo', 'Dashboard WO Backlog P1']].map(([k, label]) => (
+      {[['main', 'Dashboard Top 5'], ['wo', 'Dashboard WO Backlog P1']].map(([k, label]) => (
         <button key={k} type="button" className={`page-tab${page === k ? ' is-on' : ''}`} aria-current={page === k ? 'page' : undefined} onClick={() => onChange(k)}>{label}</button>
       ))}
     </nav>
