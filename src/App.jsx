@@ -10,7 +10,7 @@ import { FILTERS, MAX_JOBS_PER_PLANT, listOf } from './lib/data.js';
 import { iso, today0 } from './lib/dates.js';
 import { dashboardView } from './lib/view.js';
 import { readLocalBackup, useDashboardStore } from './lib/store.js';
-import { buildWorkbook, parseWorkbook } from './lib/excel.js';
+import { buildBacklogWorkbook, buildWorkbook, parseWorkbook } from './lib/excel.js';
 import ExcelImportDialog from './components/ExcelImport.jsx';
 import { BacklogPanel, BacklogUploadDialog } from './components/Backlog.jsx';
 import { fileAsOf, histRowsFrom, jobFromWo, latestDateIn, normWo, parseBacklogWorkbook } from './lib/cmms.js';
@@ -205,6 +205,14 @@ export default function App() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
+  const downloadBacklog = async (rows) => {
+    try {
+      await saveFile(`WO-Backlog-P1-${iso(t)}.xlsx`, await buildBacklogWorkbook(rows));
+    } catch {
+      setToast({ text: 'สร้างไฟล์ Excel ไม่สำเร็จ ลองใหม่อีกครั้ง', error: true });
+    }
+  };
+
   const exportExcel = async () => {
     try {
       await saveFile(`P1-dashboard-${iso(t)}.xlsx`, await buildWorkbook(data));
@@ -388,6 +396,7 @@ export default function App() {
               focus={backlogFocus}
               onTrack={trackWo}
               onUpload={() => document.getElementById('backlog-file')?.click()}
+              onDownload={downloadBacklog}
             />
 
             <div className="insights">

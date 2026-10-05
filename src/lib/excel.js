@@ -86,6 +86,33 @@ export async function buildWorkbook(data) {
   ]).toBlob();
 }
 
+/**
+ * WO Backlog rows as shown (already filtered/sorted by the panel) → .xlsx Blob, one sheet.
+ * Columns follow the CMMS export names so the file reads like the original; dates are real Excel dates.
+ */
+const BACKLOG_COLS = [
+  ['Work Order', 'wo', 14], ['Description', 'desc', 60], ['Plant', 'plant', 8], ['Status', 'status', 12], ['กลุ่มสถานะ', 'group', 22],
+  ['WO_Worklocation', 'workLoc', 14], ['ทีม', 'team', 8], ['Location', 'location', 12], ['Asset', 'asset', 14],
+  ['Target Start', 'targetStart', 13], ['Actual Start', 'actualStart', 13], ['Actual Finish', 'actualFinish', 13],
+  ['ค้าง (วัน)', 'age', 10], ['ON BEHALF OF NAME', 'owner', 24], ['Next Approve', 'nextApprove', 24], ['Supervisor', 'supervisor', 22],
+  ['Est. Job Value', 'value', 13], ['ไม่อยู่ในไฟล์ล่าสุด', 'missing', 12],
+];
+export async function buildBacklogWorkbook(rows) {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+  const data = [
+    BACKLOG_COLS.map(([h]) => ({ value: h, ...HEAD })),
+    ...rows.map((r) => BACKLOG_COLS.map(([, f]) => {
+      const v = r[f];
+      if (/Start|Finish/.test(f)) return v ? { value: toExcelDate(v), format: 'dd/mm/yyyy' } : null;
+      if (f === 'plant' || f === 'age') return v == null || v === '' ? null : Number(v);
+      if (f === 'value') return Number(v) || null;
+      if (f === 'missing') return v ? 'ใช่' : null;
+      return v ? String(v) : null;
+    })),
+  ];
+  return writeXlsxFile([{ data, sheet: 'WO Backlog P1', columns: BACKLOG_COLS.map(([, , width]) => ({ width })), stickyRowsCount: 1 }]).toBlob();
+}
+
 /* ---------------- parsing ---------------- */
 
 const text = (v) => (v == null ? '' : v instanceof Date ? iso(new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate())) : String(v).trim());

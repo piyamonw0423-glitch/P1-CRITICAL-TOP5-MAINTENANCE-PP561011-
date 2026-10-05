@@ -42,7 +42,7 @@ export function GroupSummary({ summary, active, onToggle }) {
  * The full CMMS WO list: summary, filters, search and a table. In edit mode each WO can be
  * added to Top 5 (⭐). `focus` = { plant, nonce } opens the panel on one plant.
  */
-export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrack, onUpload }) {
+export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrack, onUpload, onDownload }) {
   const [open, setOpen] = useState(false);
   const [plant, setPlant] = useState('all');
   const [groups, setGroups] = useState([]);
@@ -130,7 +130,14 @@ export function BacklogPanel({ backlog, ids, edit, tracked, today, focus, onTrac
               {changedCount > 0 && <button type="button" className={`flag-btn${flag === 'changed' ? ' is-on' : ''}`} onClick={() => { setFlag((f) => (f === 'changed' ? '' : 'changed')); setLimit(PAGE); }}>สถานะเปลี่ยนรอบล่าสุด {changedCount}</button>}
               {missingCount > 0 && <button type="button" className={`flag-btn is-missing${flag === 'missing' ? ' is-on' : ''}`} onClick={() => { setFlag((f) => (f === 'missing' ? '' : 'missing')); setLimit(PAGE); }}>ไม่อยู่ในไฟล์ล่าสุด {missingCount}</button>}
             </div>
-            <div className="backlog-count">แสดง {Math.min(limit, list.length)} จาก {list.length} WO</div>
+            <div className="backlog-count">
+              แสดง {Math.min(limit, list.length)} จาก {list.length} WO
+              {onDownload && list.length > 0 && (
+                <button type="button" className="btn btn-ghost backlog-dl" onClick={() => onDownload(list.map((r) => ({ ...r, group: STATUS_GROUPS.find((g) => g.key === effGroup(r, latest))?.label || '', missing: isMissing(r) })))}>
+                  ⬇ ดาวน์โหลด Excel ({list.length} WO ตามตัวกรอง)
+                </button>
+              )}
+            </div>
             <div className="backlog-table-wrap">
               <table className="backlog-table">
                 <thead>
