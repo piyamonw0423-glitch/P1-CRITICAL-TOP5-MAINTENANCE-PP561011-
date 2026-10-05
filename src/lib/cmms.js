@@ -318,19 +318,36 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
       .filter((t) => !((k === 'assumed' || k === 'closed') && back.has(normWo(t[0]))) || (events[k] || []).some((e) => normWo(e[0]) === normWo(t[0])))
       .slice(0, 2000);
   }
+  const fresh = new Set((out.new || []).map((t) => normWo(t[0])));
+  out.opened = (out.opened || []).map((t) => (fresh.has(normWo(t[0])) && t[4] !== 1 ? [t[0], t[1], t[2], t[3], 1, t[5]] : t));
   out.open = snapshot;
+  return out;
+}
+
+/**
+ * WOs "inserted during the day" in a stats doc: new in the file that day AND Actual Start that day.
+ * Taken from the day's lists, not from one upload, so a WO first seen in the morning file keeps its ⚡ when the
+ * afternoon upload records it as opened. Older docs (no `opened` list) use the new-WO flag.
+ */
+export function insertedWos(doc) {
+  const out = new Set();
+  if (!doc) return out;
+  const fresh = new Set((doc.new || []).map((t) => normWo(t[0])));
+  if (doc.opened) for (const t of doc.opened) { if (fresh.has(normWo(t[0])) || t[4] === 1) out.add(normWo(t[0])); }
+  else for (const t of doc.new || []) if (t[4] === 1) out.add(normWo(t[0]));
   return out;
 }
 
 /** Per upload round of a stats document: [{ at, fileName, new, inserted, started, finished, closed, missing }]. */
 export function roundTotals(doc, ids, team = null, wlOf = null) {
   const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && t !== 'OTHER' && scopeMatch(team, t, wl || wlOf?.(wo));
+  const ins = insertedWos(doc);
   return (doc?.rounds || []).map((r, i) => {
     const mine = (k) => (doc[k] || []).filter((t) => keep(t[1], t[2], t[0], t[5]) && (t[3] ? t[3] === r.at : i === 0));
     return {
       at: r.at, fileName: r.fileName, baseline: !!r.baseline,
       opened: doc.opened ? mine('opened').length : mine('new').length,
-      new: mine('new').length, inserted: mine('new').filter((t) => t[4] === 1).length,
+      new: mine('new').length, inserted: (doc.opened ? mine('opened') : mine('new')).filter((t) => ins.has(normWo(t[0]))).length,
       started: mine('started').length, finished: mine('finished').length, closed: mine('closed').length, missing: mine('assumed').length,
     };
   });
@@ -345,7 +362,8 @@ export function statTotals(doc, ids, team = null, wlOf = null) {
   const t = { opened: 0, new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
   for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl)).length;
-  t.inserted = (doc.new || []).filter(([wo, p, tm, , mid, wl]) => keep(p, tm, wo, wl) && mid === 1).length; // came in after the day's first upload
+  const ins = insertedWos(doc);
+  t.inserted = (doc.opened || doc.new || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl) && ins.has(normWo(wo))).length;
   t.closedStatus = MISSING_IS_CLOSED ? t.closed - t.assumed : t.closed; // Status (column L) → CLOSED
   if (!doc.opened) t.opened = t.new; // stats saved before "opened" existed (Oct 2026) only know new WOs
   for (const [key, o] of Object.entries(doc.open || {})) {

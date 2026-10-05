@@ -2,7 +2,7 @@
 // Shared by the LINE push (server/line.js) and the "copy summary" button (components/Report.jsx).
 import { PLANT_IDS } from './data.js';
 import { TH_M, pd } from './dates.js';
-import { statTotals } from './cmms.js';
+import { insertedWos, normWo, statTotals } from './cmms.js';
 
 const thai = (ms) => new Date(ms + 7 * 3600e3);
 export const thaiHm = (isoTs) => { const d = thai(Date.parse(isoTs)); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} น.`; };
@@ -31,7 +31,10 @@ export function roundReportText({ cur, prev = null, backlog = null, url = '', id
   const all = plantNumbers(cur, prev, ids);
   const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));
   // WOs opened on the day (Actual Start = that day), inserted (also new in the file) first.
-  const fresh = (cur.opened || cur.new || []).filter(([, p, tm]) => ids.includes(Number(p)) && tm !== 'OTHER').sort((a, b) => (b[4] === 1) - (a[4] === 1));
+  const ins = insertedWos(cur);
+  const fresh = (cur.opened || cur.new || []).filter(([, p, tm]) => ids.includes(Number(p)) && tm !== 'OTHER')
+    .map((t) => [t[0], t[1], t[2], t[3], ins.has(normWo(t[0])) ? 1 : 0])
+    .sort((a, b) => b[4] - a[4]);
   const MAX_NEW = 20; // keeps the message well under LINE's 5,000 characters
   const line = (n) => `เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${signed(n.delta)})` : ''}`;
   return [
