@@ -358,7 +358,10 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
               </div>
             </>
           )}
-          <FoldList key={`s${cur.date}`} title="เปิดงานวันนี้ (Actual Start)" note="⚡ แทรกระหว่างวัน = WO ใหม่ในไฟล์ที่ Actual Start วันนี้" items={opened} tone="rep-new" startOpen
+          <FoldList key={`s${cur.date}`} title="เปิดงานวันนี้ (Actual Start)" items={opened}
+            note={opened.some((f) => f.mid)
+              ? `⚡ แทรกระหว่างวัน ${opened.filter((f) => f.mid).length} WO = WO ใหม่ในไฟล์ที่ Actual Start วันนี้ · ที่เหลือ (ป้าย "เปิด") เป็น WO เดิมที่เริ่มงานวันนี้`
+              : 'ไม่มีงานแทรกระหว่างวัน — ทุกรายการ (ป้าย "เปิด") เป็น WO เดิมที่มีอยู่ในไฟล์ก่อนแล้ว และเริ่มงาน (Actual Start) วันนี้'} tone="rep-new" startOpen
             render={(f) => (
               <li key={f.wo} className={f.mid ? 'is-insert' : ''} title={f.row?.desc || ''}>
                 <span className="rep-age">{f.mid ? '⚡ แทรก' : 'เปิด'}</span>
