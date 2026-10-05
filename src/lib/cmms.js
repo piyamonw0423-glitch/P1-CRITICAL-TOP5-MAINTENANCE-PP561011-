@@ -26,13 +26,14 @@ export const isClosedGroup = (key) => key === 'finish' || key === 'closed';
 
 export const normWo = (w) => String(w || '').replace(/\s+/g, '').toUpperCase();
 
-// CMMS dates are instants; the dashboard works in Thai calendar days (UTC+7).
+// The CMMS export holds Thai wall-clock times (Actual Start peaks at 08:00 and 13:00). read-excel-file returns
+// such a cell as a Date whose UTC fields are that wall clock, so the calendar day is read from the UTC fields as-is
+// (adding +7 h here would push everything after 17:00 into the next day). Text dates are parsed in local time.
 const thaiDay = (v) => {
   if (v == null || v === '') return null;
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  const t = new Date(d.getTime() + 7 * 3600e3);
-  return iso(new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()));
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : iso(new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate()));
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : iso(d);
 };
 const str = (v, max = 300) => (v == null ? '' : String(v).trim().slice(0, max));
 
@@ -55,8 +56,11 @@ export const TEAMS = [
 ];
 const TEAM_KEYS = new Set(TEAMS.map((t) => t.k));
 export const normWl = (s) => String(s || '').trim().toUpperCase();
-/** Report scope filter: '' = everything, a team key (MECH…) = that team, anything else = one WO_Worklocation code. */
-export const scopeMatch = (f, team, wl) => !f || (TEAM_KEYS.has(f) ? team === f : normWl(wl) === f);
+/** Report scope filter: '' or [] = everything, a team key (MECH…) = that team, a WO_Worklocation code, or an array of those. */
+export const scopeMatch = (f, team, wl) => {
+  if (Array.isArray(f)) return !f.length || f.some((x) => scopeMatch(x, team, wl)); // several WL codes / teams
+  return !f || (TEAM_KEYS.has(f) ? team === f : normWl(wl) === f);
+};
 /** WO_Worklocation codes for a filter dropdown: the known team codes first, then any other code seen in the data. */
 export const wlOptions = (seen = []) => {
   const known = TEAMS.flatMap((t) => t.codes);
@@ -237,7 +241,7 @@ export function dayEvents(prevRows, nextRows, day) {
   const nextLatest = latestSeen(nextRows);
   const old = new Map((prevRows || []).map((r) => [normWo(r.wo), r]));
   const hasPrev = old.size > 0;
-  const ev = { new: [], started: [], finished: [], closed: [], assumed: [] };
+  const ev = { opened: [], new: [], started: [], finished: [], closed: [], assumed: [] };
   const present = nextRows.filter((r) => presentIn(r, nextLatest));
   const presentKeys = new Set(present.map((r) => normWo(r.wo)));
   for (const prev of old.values()) {
@@ -251,6 +255,8 @@ export function dayEvents(prevRows, nextRows, day) {
     if (prev && !presentIn(prev, prevLatest) && groupOf(r.status).key !== 'closed') ev.back.push(normWo(r.wo));
     const g = groupOf(r.status).key;
     const pg = prev ? groupOf(prev.status).key : null;
+    // Opened on the day = Actual Start is that day (team rule, same as the history report); 5th field = new in the file.
+    if (r.actualStart === day) ev.opened.push([...tuple(r), !prev && hasPrev ? 1 : 0]);
     // New in the file; the 5th field marks "inserted during the day" = its Actual Start is the upload day itself.
     if (!prev && hasPrev) ev.new.push([...tuple(r), r.actualStart === day ? 1 : 0]);
     const moved = prev && prev.status !== r.status;
@@ -284,7 +290,7 @@ export function openSnapshot(rows, today) {
  * Fold one upload into that day's stats document. Event lists are unions by WO, so uploading at 09:30
  * and again at 16:00 never counts a WO twice; the open snapshot is the latest of the day.
  */
-const EVENT_KEYS = ['new', 'started', 'finished', 'closed', 'assumed'];
+const EVENT_KEYS = ['opened', 'new', 'started', 'finished', 'closed', 'assumed'];
 const noEvents = () => Object.fromEntries(EVENT_KEYS.map((k) => [k, []]));
 
 export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseline = false }) {
@@ -294,7 +300,7 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   // Every event carries [wo, plant, team, upload time, flag, workLoc] (workLoc added Oct 2026; older docs lack it). For new WOs the flag means "inserted during the day"
   // (team rule: a new WO whose Actual Start is the upload day); for other events it marks a later upload of the day.
   const midday = (prev?.rounds || []).length > 0 ? 1 : 0;
-  const tagged = Object.fromEntries(EVENT_KEYS.map((k) => [k, (events[k] || []).map((t) => [t[0], t[1], t[2], at, k === 'new' ? (t[4] === 1 ? 1 : 0) : midday, t[3] || ''])]));
+  const tagged = Object.fromEntries(EVENT_KEYS.map((k) => [k, (events[k] || []).map((t) => [t[0], t[1], t[2], at, k === 'new' || k === 'opened' ? (t[4] === 1 ? 1 : 0) : midday, t[3] || ''])]));
   for (const k of EVENT_KEYS) {
     const seen = new Set((prev?.[k] || []).map((t) => normWo(t[0])));
     out[k] = [...(prev?.[k] || []), ...(tagged[k] || []).filter((t) => !seen.has(normWo(t[0])))]
@@ -312,6 +318,7 @@ export function roundTotals(doc, ids, team = null, wlOf = null) {
     const mine = (k) => (doc[k] || []).filter((t) => keep(t[1], t[2], t[0], t[5]) && (t[3] ? t[3] === r.at : i === 0));
     return {
       at: r.at, fileName: r.fileName, baseline: !!r.baseline,
+      opened: doc.opened ? mine('opened').length : mine('new').length,
       new: mine('new').length, inserted: mine('new').filter((t) => t[4] === 1).length,
       started: mine('started').length, finished: mine('finished').length, closed: mine('closed').length, missing: mine('assumed').length,
     };
@@ -324,11 +331,12 @@ export function roundTotals(doc, ids, team = null, wlOf = null) {
  */
 export function statTotals(doc, ids, team = null, wlOf = null) {
   const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && scopeMatch(team, t, wl || (wo != null ? wlOf?.(wo) : ''));
-  const t = { new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
+  const t = { opened: 0, new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
   for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl)).length;
   t.inserted = (doc.new || []).filter(([wo, p, tm, , mid, wl]) => keep(p, tm, wo, wl) && mid === 1).length; // came in after the day's first upload
   t.closedStatus = MISSING_IS_CLOSED ? t.closed - t.assumed : t.closed; // Status (column L) → CLOSED
+  if (!doc.opened) t.opened = t.new; // stats saved before "opened" existed (Oct 2026) only know new WOs
   for (const [key, o] of Object.entries(doc.open || {})) {
     const [p, tm, wl = ''] = key.split('|');
     if (!keep(p, tm, null, wl)) continue;

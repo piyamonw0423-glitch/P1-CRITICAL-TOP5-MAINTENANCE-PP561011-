@@ -424,6 +424,16 @@ a { color: oklch(0.5 0.17 255); }
 .rep-select { border: 0; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: white; }
 .rep-wl { border: 1px solid var(--line); padding: 7px 14px; min-width: 220px; cursor: pointer; }
 .rep-wl-note { font-size: 12px; }
+.wl-pick { position: relative; display: inline-block; }
+.wl-pick .rep-wl { display: inline-flex; align-items: center; gap: 8px; max-width: min(360px, 80vw); }
+.wl-pick-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 230px; padding: 8px; background: white; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px oklch(0.2 0.03 258 / 0.18); font-size: 13.5px; }
+.wl-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; cursor: pointer; }
+.wl-row:hover { background: oklch(0.96 0.01 250); }
+.wl-row input { width: 16px; height: 16px; accent-color: var(--navy); }
+.wl-all { font-weight: 700; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; border-radius: 8px 8px 0 0; }
+.wl-team { font-weight: 700; }
+.wl-code { padding-left: 28px; }
 .rep-copy { padding: 6px 14px; font-size: 13px; }
 .rep-empty { margin: 0; padding: 16px 18px; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
 .rep-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 18px 0; }

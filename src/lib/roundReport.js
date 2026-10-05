@@ -17,7 +17,7 @@ export function plantNumbers(cur, prev, ids) {
   const t = statTotals(cur, ids);
   const keep = ([, p]) => ids.includes(Number(p));
   const done = new Set([...(cur?.finished || []), ...(cur?.closed || [])].filter(keep).map((x) => String(x[0])));
-  return { opened: t.new, inserted: t.inserted, done: done.size, closed: t.closed, waitClose: t.finished, open: t.open, delta: prev ? t.open - statTotals(prev, ids).open : null };
+  return { opened: t.opened, newInFile: t.new, inserted: t.inserted, done: done.size, closed: t.closed, waitClose: t.finished, open: t.open, delta: prev ? t.open - statTotals(prev, ids).open : null };
 }
 
 /**
@@ -30,8 +30,8 @@ export function roundReportText({ cur, prev = null, backlog = null, url = '', id
   const last = cur.rounds?.at(-1);
   const all = plantNumbers(cur, prev, ids);
   const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));
-  // New WOs of the day, inserted (Actual Start = upload day) first.
-  const fresh = (cur.new || []).filter(([, p]) => ids.includes(Number(p))).sort((a, b) => (b[4] === 1) - (a[4] === 1));
+  // WOs opened on the day (Actual Start = that day), inserted (also new in the file) first.
+  const fresh = (cur.opened || cur.new || []).filter(([, p]) => ids.includes(Number(p))).sort((a, b) => (b[4] === 1) - (a[4] === 1));
   const MAX_NEW = 20; // keeps the message well under LINE's 5,000 characters
   const line = (n) => `เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${signed(n.delta)})` : ''}`;
   return [
@@ -43,14 +43,14 @@ export function roundReportText({ cur, prev = null, backlog = null, url = '', id
     `  (CLOSED ${all.closed} · เสร็จรอปิด ${all.waitClose})`,
     '',
     ...ids.map((id) => `🏭 PP${id}: ${line(plantNumbers(cur, prev, [id]))}`),
-    ...(fresh.length ? ['', `WO เข้าใหม่ ${fresh.length} (⚡ แทรกระหว่างวัน = Actual Start วันนี้):`,
+    ...(fresh.length ? ['', `เปิดงานวันนี้ (Actual Start) ${fresh.length} WO (⚡ = แทรกระหว่างวัน):`,
       ...fresh.slice(0, MAX_NEW).map(([wo, p, tm, , f]) => {
         const r = byWo.get(String(wo));
         return `${f === 1 ? '⚡' : '•'} ${wo} PP${p} ${tm}${r?.status ? ` ${r.status}` : ''} – ${String(r?.desc || '').slice(0, 60)}`;
       }),
       ...(fresh.length > MAX_NEW ? [`…และอีก ${fresh.length - MAX_NEW} รายการ (ดูในเว็บ)`] : [])] : []),
     '',
-    'นับสะสมทั้งวัน · เสร็จ/ปิด = เสร็จรอปิด + CLOSED (รวมไม่พบในไฟล์ล่าสุด) · คงค้างเทียบเมื่อวาน',
+    `WO ใหม่ในไฟล์ (เทียบรอบก่อน) ${all.newInFile} · นับสะสมทั้งวัน · เปิดงาน = Actual Start วันนี้ · เสร็จ/ปิด = เสร็จรอปิด + CLOSED (รวมไม่พบในไฟล์ล่าสุด) · คงค้างเทียบเมื่อวาน`,
     ...(url ? [`🔗 ${url}`] : []),
   ].join('\n');
 }

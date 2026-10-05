@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { histSeries, histTeam, histTotals, teamOf, wlOptions } from '../lib/cmms.js';
-import WlSelect from './WlSelect.jsx';
+import { histSeries, histTeam, histTotals, wlOptions } from '../lib/cmms.js';
+import WlSelect, { toggleWl, wlLabel } from './WlSelect.jsx';
 import { TH_M, iso } from '../lib/dates.js';
 import { CLOSE, FlowChart, OpenChart, START } from './Report.jsx';
 
@@ -28,9 +28,9 @@ function Tile({ label, value, sub, tone }) {
 
 export default function HistoryReport({ wohist, ids, today, plantLabel, edit, onImport }) {
   const [period, setPeriod] = useState('month');
-  const [team, setTeam] = useState('');
+  const [team, setTeam] = useState([]); // selected WO_Worklocation codes, [] = all
   const rows = wohist?.rows || [];
-  const tm = team || null;
+  const tm = team.length ? team : null;
   const t0 = iso(today);
   const year = today.getFullYear();
   const range = {
@@ -83,7 +83,7 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
   return (
     <section className="panel rep hist" aria-label="ผลงานสะสม">
       <div className="panel-head panel-head-split">
-        <span>ผลงาน P1 สะสม · {plantLabel}{tm ? ` · ${tm} (${teamOf(tm)})` : ' · ทุก WO_Worklocation'}</span>
+        <span>ผลงาน P1 สะสม · {plantLabel}{` · ${wlLabel(team)}`}</span>
         <span className="rep-controls">
           {PERIODS.map((p) => (
             <button key={p.k} type="button" className={`chip chip-on-navy${period === p.k ? ' is-on' : ''}`} onClick={() => setPeriod(p.k)}>{p.label}</button>
@@ -124,7 +124,7 @@ export default function HistoryReport({ wohist, ids, today, plantLabel, edit, on
               <thead><tr><th>WO_Worklocation</th><th>เปิดงาน</th><th>ปิดงาน</th><th>% ปิด</th><th>คงค้าง</th><th>รออะไหล่</th><th>รอเริ่ม</th></tr></thead>
               <tbody>
                 {byTeam.map((x) => (
-                  <tr key={x.k} className={team === x.k ? 'is-on' : ''} onClick={() => setTeam(team === x.k ? '' : x.k)}>
+                  <tr key={x.k} className={team.includes(x.k) ? 'is-on' : ''} onClick={() => setTeam(toggleWl(team, x.k))}>
                     <th>{x.label} <span className="muted">{x.team}</span></th><td>{x.opened}</td><td>{x.closed}</td><td>{pct(x.closed, x.opened)}%</td><td><b>{x.backlogEnd}</b></td><td>{x.material}</td><td>{x.waiting}</td>
                   </tr>
                 ))}
