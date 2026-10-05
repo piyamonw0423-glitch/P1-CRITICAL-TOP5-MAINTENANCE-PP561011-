@@ -86,6 +86,10 @@ const KEY_STORE = 'p1dash.editKey';
 const readKey = () => { try { return localStorage.getItem(KEY_STORE) || ''; } catch { return ''; } };
 const writeKey = (k) => { try { if (k) localStorage.setItem(KEY_STORE, k); else localStorage.removeItem(KEY_STORE); } catch { /* storage blocked */ } };
 const POLL_MS = 15000;
+// A tab nobody has touched for IDLE_AFTER_MS (e.g. a wall screen) polls only every IDLE_POLL_MS, so the Neon
+// free compute can suspend between checks (it sleeps after 5 idle minutes; 100 CU-hours/month on the free plan).
+const IDLE_AFTER_MS = 10 * 60e3;
+const IDLE_POLL_MS = 30 * 60e3;
 const TIMEOUT_MS = 30000;
 // fetch() that gives up after TIMEOUT_MS instead of leaving the page waiting forever.
 const fetchT = (url, opts = {}) => {
@@ -144,8 +148,13 @@ function useApiStore() {
       }
     });
     // Poll a tiny version stamp while the tab is visible; fetch everything only when it changes.
-    const tick = async () => {
+    let lastActive = Date.now();
+    let lastPoll = 0;
+    const tick = async (force = false) => {
       if (document.hidden) return;
+      const idle = Date.now() - lastActive > IDLE_AFTER_MS;
+      if (!force && idle && Date.now() - lastPoll < IDLE_POLL_MS) return;
+      lastPoll = Date.now();
       try {
         const r = await fetchT('api/version', { cache: 'no-store' });
         if (!r.ok) return;
@@ -153,10 +162,18 @@ function useApiStore() {
         if (updatedAt !== versionRef.current) await load();
       } catch { /* offline; try again next tick */ }
     };
-    const t = setInterval(tick, POLL_MS);
-    const onVisible = () => { if (!document.hidden) tick(); };
+    const t = setInterval(() => tick(), POLL_MS);
+    const onVisible = () => { if (!document.hidden) { lastActive = Date.now(); tick(true); } };
+    // Coming back to an idle tab checks at once, so nobody looks at stale numbers.
+    const onActive = () => { const wasIdle = Date.now() - lastActive > IDLE_AFTER_MS; lastActive = Date.now(); if (wasIdle) tick(true); };
+    const acts = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
     document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
+    acts.forEach((e) => window.addEventListener(e, onActive, { passive: true }));
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+      acts.forEach((e) => window.removeEventListener(e, onActive));
+    };
   }, [load]);
 
   const request = async (method, url, body, key = editKey) => {
