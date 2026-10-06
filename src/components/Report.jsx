@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ageDays, effGroup, insertedWos, isClosedGroup, latestSeen, normWo, openSnapshot, roundTotals, scopeMatch, statTotals, teamOf, wlOptions } from '../lib/cmms.js';
+import { ageDays, effGroup, insertedWos, withEntered, isClosedGroup, latestSeen, normWo, openSnapshot, roundTotals, scopeMatch, statTotals, teamOf, wlOptions } from '../lib/cmms.js';
 import WlSelect, { toggleWl, wlLabel } from './WlSelect.jsx';
 import { pd, thD } from '../lib/dates.js';
 import { plantNumbers, roundLabel } from '../lib/roundReport.js';
@@ -182,8 +182,11 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   // Open snapshots saved before Oct 2026 are keyed plant|team only; for the latest day rebuild it from the
   // current backlog so the WO_Worklocation filter shows real open counts right away.
   const legacySnap = (d) => Object.keys(d?.open || {}).some((k) => k.split('|').length < 3);
-  const cur = useMemo(() => (picked && picked === days.at(-1) && legacySnap(picked) && backlog?.rows?.length
-    ? { ...picked, open: openSnapshot(backlog.rows, today) } : picked), [picked, days, backlog, today]);
+  const cur = useMemo(() => {
+    const isLatest = !!picked && picked === days.at(-1);
+    const d = isLatest && legacySnap(picked) && backlog?.rows?.length ? { ...picked, open: openSnapshot(backlog.rows, today) } : picked;
+    return withEntered(d, backlog, isLatest); // "entered the backlog" for the latest day comes from the WO list itself
+  }, [picked, days, backlog, today]);
   const idx = picked ? days.indexOf(picked) : -1;
   const prev = idx > 0 ? days[idx - 1] : null;
   const tm = team.length ? team : null;
@@ -266,7 +269,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
     return lines.join('\n');
   };
   // Same analysed message the LINE push sends (all plants), for pasting into a group chat.
-  const roundText = () => analysisText({ cur: picked, prev, backlog, today, url: `${location.origin}${location.pathname}` });
+  const roundText = () => analysisText({ cur: picked, prev, backlog, today, latest: picked === days.at(-1), url: `${location.origin}${location.pathname}` });
   const copy = async (which) => {
     const text = which === 'round' ? roundText() : summary();
     try {

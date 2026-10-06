@@ -341,6 +341,28 @@ export function insertedWos(doc) {
   return out;
 }
 
+/**
+ * "Entered the backlog" on `day`, read from the backlog rows themselves: open in the latest file and first seen
+ * that day, or moved that day from finished/closed back to open. Independent of how many uploads the day had
+ * (the per-upload `entered` event only compares with the previous upload). Tuples like the stats events.
+ */
+export function enteredFromBacklog(rows, day) {
+  const latest = latestSeen(rows);
+  return (rows || []).filter((r) => isTrackedRow(r) && presentIn(r, latest) && !isClosedGroup(groupOf(r.status).key)
+    && (r.firstSeen === day || (r.statusSince === day && r.prevStatus && isClosedGroup(groupOf(r.prevStatus).key))))
+    .map((r) => [r.wo, r.plant, rowTeam(r), '', 0, normWl(r.workLoc)]);
+}
+
+/**
+ * The report day's stats doc with `entered` taken from the backlog when it is the latest day (see above).
+ * A baseline day has nothing "entered" (every row was first seen then).
+ */
+export function withEntered(doc, backlog, isLatest) {
+  if (!doc || !isLatest || !backlog?.rows?.length) return doc;
+  if (doc.baseline && (doc.rounds || []).length <= 1) return { ...doc, entered: [] };
+  return { ...doc, entered: enteredFromBacklog(backlog.rows, doc.date) };
+}
+
 /** Per upload round of a stats document: [{ at, fileName, new, inserted, started, finished, closed, missing }]. */
 export function roundTotals(doc, ids, team = null, wlOf = null) {
   const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && t !== 'OTHER' && scopeMatch(team, t, wl || wlOf?.(wo));

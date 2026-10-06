@@ -3,7 +3,7 @@
 // Every upload stores a compact summary in the day's stats doc (`dash`) so the next day can be compared with it.
 import { PLANT_IDS } from './data.js';
 import { TH_M, pd } from './dates.js';
-import { STATUS_GROUPS, TEAMS, groupOf, insertedWos, normWo, statTotals } from './cmms.js';
+import { STATUS_GROUPS, TEAMS, groupOf, insertedWos, normWo, statTotals, withEntered } from './cmms.js';
 import { backlogDashboard } from './backlogDash.js';
 import { plantNumbers, roundLabel } from './roundReport.js';
 
@@ -35,8 +35,9 @@ const firstName = (s) => String(s || '').trim().split(/\s+/)[0] || s;
  * @param backlog    backlog doc — descriptions, and today's summary when cur.dash is missing (older docs)
  * @param today      Date (Thai day) used only for that fallback
  */
-export function analysisText({ cur, prev = null, backlog = null, url = '', today = new Date() }) {
+export function analysisText({ cur, prev = null, backlog = null, url = '', today = new Date(), latest = true }) {
   if (!cur) return `ยังไม่มีรายงาน — อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
+  cur = withEntered(cur, backlog, latest); // "entered" of the latest day comes from the WO list itself
   const ids = PLANT_IDS;
   const now = cur.dash || (backlog ? compactDash(backlog.rows, today) : null);
   const was = prev?.dash || null;
