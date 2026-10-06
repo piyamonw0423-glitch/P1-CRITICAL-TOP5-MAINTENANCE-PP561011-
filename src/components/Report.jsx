@@ -3,7 +3,7 @@ import { ageDays, effGroup, insertedWos, withEntered, isClosedGroup, latestSeen,
 import WlSelect, { toggleWl, wlLabel } from './WlSelect.jsx';
 import { pd, thD } from '../lib/dates.js';
 import { plantNumbers, roundLabel } from '../lib/roundReport.js';
-import { analysisText } from '../lib/analysis.js';
+import { analysisText, eveningText } from '../lib/analysis.js';
 
 // Daily CMMS performance: what was new / started / finished / closed on a day, the open backlog by team,
 // a 14-day trend, the oldest open WOs and a text summary to forward on LINE.
@@ -269,9 +269,12 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
     return lines.join('\n');
   };
   // Same analysed message the LINE push sends (all plants), for pasting into a group chat.
-  const roundText = () => analysisText({ cur: picked, prev, backlog, today, latest: picked === days.at(-1), url: `${location.origin}${location.pathname}` });
+  const link = `${location.origin}${location.pathname}`;
+  const roundText = () => analysisText({ cur: picked, prev, backlog, today, latest: picked === days.at(-1), url: link });
+  const eveText = () => eveningText({ cur: picked, backlog, today, url: link });
+  const canEvening = (picked?.rounds?.length || 0) >= 2;
   const copy = async (which) => {
-    const text = which === 'round' ? roundText() : summary();
+    const text = which === 'round' ? roundText() : which === 'evening' ? eveText() : summary();
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -292,7 +295,8 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           <select className="rep-select" value={cur.date} onChange={(e) => setDate(e.target.value)} aria-label="เลือกวัน">
             {[...days].reverse().map((d) => <option key={d.date} value={d.date}>{dayLabel(d.date)} {pd(d.date).getFullYear() + 543}</option>)}
           </select>
-          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('round')} title="ข้อความวิเคราะห์เทียบวันก่อน (ทุกโรง) — เหมือนที่ส่ง LINE">{copied === 'round' ? 'คัดลอกแล้ว ✓' : 'คัดลอกข้อความวิเคราะห์ (LINE)'}</button>
+          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('round')} title="ข้อความเช้า: เทียบกับวันรายงานก่อนหน้า (ทุกโรง)">{copied === 'round' ? 'คัดลอกแล้ว ✓' : 'ข้อความเช้า (LINE)'}</button>
+          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('evening')} disabled={!canEvening} title={canEvening ? 'ข้อความเย็น: เทียบกับรอบเช้าของวันเดียวกัน — ปิดงานไปกี่ WO' : 'ต้องมีการอัปโหลดอย่างน้อย 2 รอบในวันนี้ (เช้า + เย็น)'}>{copied === 'evening' ? 'คัดลอกแล้ว ✓' : 'ข้อความเย็น (LINE)'}</button>
           <button type="button" className="btn btn-ghost rep-copy" onClick={() => copy('detail')} title="รายการ WO ทั้งหมดของวัน">{copied === 'detail' ? 'คัดลอกแล้ว ✓' : 'คัดลอกรายละเอียด'}</button>
         </span>
       </div>

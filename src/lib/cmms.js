@@ -324,6 +324,8 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   out.opened = (out.opened || []).map((t) => (fresh.has(normWo(t[0])) && t[4] !== 1 ? [t[0], t[1], t[2], t[3], 1, t[5]] : t));
   out.open = snapshot;
   if (dash || prev?.dash) out.dash = dash || prev.dash; // compact backlog summary of the day's latest upload (analysis.js)
+  const first = prev ? prev.dashFirst || prev.dash : dash; // ... and of its first (morning) upload, for the evening report
+  if (first) out.dashFirst = first;
   return out;
 }
 

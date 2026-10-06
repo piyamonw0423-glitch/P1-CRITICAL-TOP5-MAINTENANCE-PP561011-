@@ -5,7 +5,7 @@
 //   LINE_TO (secret)                    user ID(s) that receive pushes, comma-separated (U…)
 //   PUBLIC_URL (variable, optional)     link added to messages
 // Push messages count toward the LINE OA monthly quota; replies to a user's message do not.
-import { analysisText } from '../src/lib/analysis.js';
+import { reportText } from '../src/lib/analysis.js';
 import { TH_M, pd } from '../src/lib/dates.js';
 
 const API = (env) => env.LINE_API_BASE || 'https://api.line.me';
@@ -53,10 +53,10 @@ const thaiParts = (ms) => { const d = new Date(ms + 7 * 3600e3); return { h: d.g
 const hm = (iso) => { const { h, m } = thaiParts(Date.parse(iso)); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
 const thaiDate = (day) => { const d = pd(day); return `${d.getDate()} ${TH_M[d.getMonth()]} ${d.getFullYear() + 543}`; };
 
-/** Analysed update of the latest day in `days` (oldest → newest stats docs) vs the previous report day. */
+/** Morning update vs the previous report day, or the evening progress vs the morning upload (see reportText). */
 export const summaryText = ({ days, backlog, url }) => {
   const today = new Date(Date.now() + 7 * 3600e3);
-  return analysisText({ cur: days.at(-1), prev: days.length > 1 ? days.at(-2) : null, backlog, url, today: new Date(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) });
+  return reportText({ cur: days.at(-1), prev: days.length > 1 ? days.at(-2) : null, backlog, url, today: new Date(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) });
 };
 
 const HELP = 'พิมพ์ "สรุป" เพื่อดูรายงาน WO P1 ล่าสุด · พิมพ์ "id" เพื่อดูรหัสผู้ใช้ LINE ของคุณ (ใช้ตั้งค่า LINE_TO)';

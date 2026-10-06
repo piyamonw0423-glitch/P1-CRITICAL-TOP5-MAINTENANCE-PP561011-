@@ -21,6 +21,7 @@ export function compactDash(rows, today) {
     over365: d.kpi.over365,
     groups: Object.fromEntries(d.groups.map((g) => [g.key, [g.count, g.avgAge]])),
     teams: Object.fromEntries(d.teams.map((t) => [t.k, [t.count, t.over180]])),
+    plants: Object.fromEntries(d.plants.map((p) => [p.plant, p.count])),
     oldest: d.oldest.map((r) => [String(r.wo), r.age, r.g]),
     appr365: d.approvers.filter((a) => a.over365).sort((a, b) => b.over365 - a.over365).slice(0, 3).map((a) => [a.name, a.over365]),
   };
@@ -46,7 +47,7 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   const p = prev ? statTotals(prev, ids) : null;
   const last = cur.rounds?.at(-1);
   const vsLabel = prev ? `เทียบกับ ${thaiShort(prev.date)}` : 'วันแรกที่บันทึก';
-  const lines = [`📊 Update : WO Backlog P1 · ${thaiShort(cur.date)}${last ? ` · ${roundLabel(last.at)}` : ''} (${vsLabel})`, ''];
+  const lines = [`📊 Update : WO Backlog P1 · ${thaiShort(cur.date)} (${vsLabel})`, ''];
 
   // 1) Open backlog vs previous day
   const openNow = now ? now.open : t.open;
@@ -93,10 +94,7 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   const ins = insertedWos(cur);
   const opened = (cur.opened || cur.new || []).filter(inScope)
     .sort((a, b) => ins.has(normWo(b[0])) - ins.has(normWo(a[0])));
-  lines.push(`▶️ เปิดงานจริง (Actual Start วันนี้) ${t.opened} WO${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''}`);
-  for (const x of opened.slice(0, LIST_MAX)) lines.push(woLine(ins.has(normWo(x[0])) ? '⚡' : '•', x));
-  lines.push(...more(opened));
-  if (!opened.length) lines.push('• วันนี้ยังไม่มีงานที่ Actual Start เป็นวันนี้');
+  void opened; // the morning message keeps only the counts (plant lines); the evening message lists them
   lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิดวันนี้ ${t.finished} WO`);
   lines.push('');
 
@@ -132,7 +130,7 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     const acts = [];
     if (now.over365) {
       const who = now.appr365[0];
-      acts.push(`เคลียร์งานค้างเกิน 1 ปี ${now.over365} WO ก่อน — เจ้าของงานทบทวนว่าจะดำเนินการต่อหรือยกเลิก${who ? ` (${who[1]} WO รอคุณ ${firstName(who[0])} พิจารณา/อนุมัติ)` : ''}`);
+      acts.push(`เคลียร์งานค้างเกิน 1 ปี ${now.over365} WO ก่อน — Section ทบทวนว่าจะดำเนินการต่อหรือยกเลิก${who ? ` (${who[1]} WO รอคุณ ${firstName(who[0])} พิจารณา/อนุมัติ)` : ''}`);
     }
     if (topTeam?.[1]) acts.push(`ทีม ${topTeam[0]} ทบทวนงานค้างเกิน 180 วัน ${topTeam[1]} WO — อัปเดตแผน วันเข้างาน หรือปิดงานที่ไม่จำเป็น`);
     if (entered?.length) {
@@ -147,4 +145,96 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   lines.push(`📌 ข้อมูลจาก CMMS${last?.fileName ? ` (${last.fileName})` : ''}`);
   if (url) lines.push(`🔗 Data link : ${url}`);
   return lines.join('\n');
+}
+
+
+const thaiHour = (isoTs) => new Date(Date.parse(isoTs) + 7 * 3600e3).getUTCHours();
+const hhmm = (isoTs) => { const d = new Date(Date.parse(isoTs) + 7 * 3600e3); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`; };
+
+/** Evening = the latest upload is after noon and the day already had an earlier (morning) upload. */
+export const isEveningReport = (cur) => (cur?.rounds?.length || 0) >= 2 && thaiHour(cur.rounds.at(-1).at) >= 12;
+
+/**
+ * Evening progress vs the day's first (morning) upload: WOs closed since then (with names), finished awaiting
+ * close, entered the backlog, opened (Actual Start today), open backlog morning → evening per plant and team.
+ */
+export function eveningText({ cur, backlog = null, url = '', today = new Date() }) {
+  if (!cur) return analysisText({ cur, url });
+  const ids = PLANT_IDS;
+  const am = cur.rounds[0], pm = cur.rounds.at(-1);
+  const byWo = new Map((backlog?.rows || []).map((r) => [normWo(r.wo), r]));
+  const since = (k) => (cur[k] || []).filter((x) => x[3] && x[3] !== am.at && ids.includes(Number(x[1])) && x[2] !== 'OTHER');
+  const assumedSet = new Set(since('assumed').map((x) => normWo(x[0])));
+  const closed = since('closed'), finished = since('finished'), entered = since('entered');
+  const ins = insertedWos(cur);
+  const opened = (cur.opened || []).filter((x) => ids.includes(Number(x[1])) && x[2] !== 'OTHER')
+    .sort((a, b) => ins.has(normWo(b[0])) - ins.has(normWo(a[0])));
+  const morning = cur.dashFirst || null;
+  const evening = cur.dash || (backlog ? compactDash(backlog.rows, today) : null);
+  const LIST_MAX = 15;
+  const line = (mark, [wo, plant, team], extra = '') => {
+    const r = byWo.get(normWo(wo));
+    return `${mark} ${wo} PP${plant} ${team}${extra} – ${String(r?.desc || '').slice(0, 50)}`;
+  };
+  const more = (list) => (list.length > LIST_MAX ? [`…และอีก ${list.length - LIST_MAX} รายการ (ดูในเว็บ)`] : []);
+  const lines = [`🌇 สรุปเย็น : WO Backlog P1 · ${thaiShort(cur.date)} · รอบ ${hhmm(pm.at)} น. (เทียบกับรอบเช้า ${hhmm(am.at)} น.)`, ''];
+
+  const byStatus = closed.length - [...assumedSet].length;
+  lines.push(`✅ วันนี้ปิดงานได้ ${closed.length} WO${closed.length ? ` (Status CLOSED ${byStatus} + ไม่พบในไฟล์ ${assumedSet.size})` : ''} · เสร็จรอปิดเพิ่ม ${finished.length} WO`);
+  if (morning && evening) {
+    const dv = evening.open - morning.open;
+    lines.push(`${dv < 0 ? '📉' : dv > 0 ? '📈' : '➖'} งานค้าง เช้า ${morning.open} → เย็น ${evening.open} (${sign(dv)})`);
+    const moved = Object.keys({ ...evening.groups, ...morning.groups })
+      .map((k) => [k, evening.groups[k]?.[0] || 0, morning.groups[k]?.[0] || 0]).filter(([, a, b]) => a !== b)
+      .sort((x, y) => Math.abs(y[1] - y[2]) - Math.abs(x[1] - x[2])).slice(0, 3);
+    for (const [k, a, b] of moved) lines.push(`• ${GROUP[k]?.label || k} ${b} → ${a} (${sign(a - b)})`);
+    const deltas = TEAM_KEYS.map((k) => [k, (evening.teams[k]?.[0] || 0) - (morning.teams[k]?.[0] || 0)]);
+    const changed = deltas.filter(([, d]) => d).sort((a, b) => a[1] - b[1]).map(([k, d]) => `${k} ${sign(d)}`);
+    const same = deltas.filter(([, d]) => !d).map(([k]) => k);
+    lines.push(`• ${[...changed, ...(same.length ? [`${same.join(', ')} เท่าเดิม`] : [])].join(' | ')}`);
+  } else if (evening) lines.push(`📌 งานค้างตอนเย็น ${evening.open} WO`);
+  lines.push('');
+
+  if (closed.length) {
+    lines.push(`✅ งานที่ปิดระหว่างวัน ${closed.length} WO`);
+    for (const x of closed.slice(0, LIST_MAX)) {
+      const r = byWo.get(normWo(x[0]));
+      const was = assumedSet.has(normWo(x[0])) ? r?.status : r?.prevStatus;
+      lines.push(line('✓', x, was ? ` (เดิม ${was})` : ''));
+    }
+    lines.push(...more(closed), '');
+  }
+  if (finished.length) {
+    lines.push(`🟡 เสร็จรอปิดเพิ่ม ${finished.length} WO (รอตรวจรับ/CLOSE)`);
+    for (const x of finished.slice(0, LIST_MAX)) lines.push(line('•', x, byWo.get(normWo(x[0]))?.status ? ` ${byWo.get(normWo(x[0])).status}` : ''));
+    lines.push(...more(finished), '');
+  }
+  if (entered.length) {
+    lines.push(`🆕 เข้า Backlog ระหว่างวัน ${entered.length} WO`);
+    for (const x of entered.slice(0, LIST_MAX)) lines.push(line('•', x, byWo.get(normWo(x[0]))?.status ? ` ${byWo.get(normWo(x[0])).status}` : ''));
+    lines.push(...more(entered), '');
+  }
+  lines.push(`▶️ เปิดงานจริงวันนี้ (Actual Start) ${opened.length} WO${ins.size ? ` (⚡แทรก ${opened.filter((x) => ins.has(normWo(x[0]))).length})` : ''}`);
+  for (const x of opened.slice(0, LIST_MAX)) lines.push(line(ins.has(normWo(x[0])) ? '⚡' : '•', x));
+  lines.push(...more(opened));
+  if (!opened.length) lines.push('• ไม่มีงานที่ Actual Start เป็นวันนี้');
+  lines.push('');
+
+  for (const id of ids) {
+    const mine = (list) => list.filter((x) => Number(x[1]) === id).length;
+    const openNow = statTotals(cur, [id]).open;
+    const openAm = morning?.plants?.[id];
+    lines.push(`🏭 PP${id}: ปิด ${mine(closed)} · เสร็จรอปิด ${mine(finished)} · เข้าใหม่ ${mine(entered)} · คงค้าง ${openAm != null ? `${openAm} → ${openNow} (${sign(openNow - openAm)})` : openNow}`);
+  }
+  lines.push('');
+  const left = closed.length + finished.length;
+  lines.push(left ? `ขอบคุณทีมงานที่ช่วยปิด/เสร็จงานวันนี้ ${left} WO ค่ะ 🙏 พรุ่งนี้ช่วยเร่งงานค้างเกิน 1 ปีและงานรอวางแผน/อนุมัติต่อนะคะ` : 'วันนี้ยังไม่มีงานปิดเพิ่มจากรอบเช้า รบกวนเจ้าของงานช่วยเร่งเคลียร์ค่ะ 🙏', '');
+  lines.push(`📌 ข้อมูลจาก CMMS${pm.fileName ? ` (${pm.fileName})` : ''}`);
+  if (url) lines.push(`🔗 Data link : ${url}`);
+  return lines.join('\n');
+}
+
+/** The message for the latest upload: evening progress after a morning upload, else the morning update. */
+export function reportText(args) {
+  return isEveningReport(args.cur) ? eveningText(args) : analysisText(args);
 }
