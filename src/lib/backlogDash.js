@@ -28,7 +28,7 @@ export function backlogDashboard(rows, ids, today) {
   const total = open.length;
   const ages = open.map((r) => r.age);
   const valued = open.filter((r) => Number(r.value) > 0);
-  const summary = (list) => ({ count: list.length, pct: pct(list.length, total), avgAge: avg(list.map((r) => r.age)) });
+  const summary = (list) => ({ count: list.length, pct: pct(list.length, total), avgAge: avg(list.map((r) => r.age)), avgExact: list.length ? list.reduce((s, r) => s + r.age, 0) / list.length : 0 });
 
   const groups = STATUS_GROUPS.filter((g) => !isClosedGroup(g.key))
     .map((g) => ({ ...g, ...summary(open.filter((r) => r.g === g.key)) }))

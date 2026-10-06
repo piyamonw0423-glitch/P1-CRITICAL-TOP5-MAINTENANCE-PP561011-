@@ -17,6 +17,10 @@ export function compactDash(rows, today) {
   return {
     open: d.total,
     avg: d.kpi.avgAge,
+    avg1: d.total ? Math.round((d.groups.reduce((sum, g) => sum + g.avgExact * g.count, 0) / d.total) * 10) / 10 : 0,
+    max: d.kpi.maxAge,
+    value: d.kpi.value,
+    valued: d.kpi.valueCount,
     over180: d.kpi.over180,
     over365: d.kpi.over365,
     groups: Object.fromEntries(d.groups.map((g) => [g.key, [g.count, g.avgAge]])),
@@ -41,12 +45,13 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   cur = withEntered(cur, backlog, latest); // "entered" of the latest day comes from the WO list itself
   const ids = PLANT_IDS;
   const now = cur.dash || (backlog ? compactDash(backlog.rows, today) : null);
-  const was = prev?.dash || null;
+  // Compare morning with morning (like the team's day-to-day sheet): the previous day's first upload when known.
+  const was = prev?.dashFirst || prev?.dash || null;
   const byWo = new Map((backlog?.rows || []).map((r) => [normWo(r.wo), r]));
   const t = statTotals(cur, ids);
   const p = prev ? statTotals(prev, ids) : null;
   const last = cur.rounds?.at(-1);
-  const vsLabel = prev ? `เทียบกับ ${thaiShort(prev.date)}` : 'วันแรกที่บันทึก';
+  const vsLabel = prev ? `เทียบกับ${prev.dashFirst && (prev.rounds || []).length > 1 ? 'รอบเช้า ' : ' '}${thaiShort(prev.date)}` : 'วันแรกที่บันทึก';
   const lines = [`📊 Update : WO Backlog P1 · ${thaiShort(cur.date)} (${vsLabel})`, ''];
 
   // 1) Open backlog vs previous day
@@ -65,13 +70,23 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     for (const [k, a, b] of moved) lines.push(`• ${GROUP[k]?.label || k} ${b} → ${a} (${sign(a - b)})`);
   }
   // Team change: from the stored summary, else from the open snapshot (plant|team keys).
-  const teamOpen = (doc, k) => (doc?.dash ? doc.dash.teams[k]?.[0] || 0 : statTotals(doc, ids, k).open);
+  const teamOpen = (doc, k) => { const d = doc === prev ? was : doc?.dash; return d ? d.teams[k]?.[0] || 0 : statTotals(doc, ids, k).open; };
   if (prev) {
     const nowDoc = cur.dash ? cur : { ...cur, dash: now };
     const deltas = TEAM_KEYS.map((k) => [k, teamOpen(nowDoc, k) - teamOpen(prev, k)]);
     const changed = deltas.filter(([, d]) => d).sort((a, b) => a[1] - b[1]).map(([k, d]) => `${k} ${sign(d)}`);
     const same = deltas.filter(([, d]) => !d).map(([k]) => k);
     lines.push(`• ${[...changed, ...(same.length ? [`${same.join(', ')} เท่าเดิม`] : [])].join(' | ')}`);
+  }
+  // Overview like the team's sheet (needs both days' summaries).
+  if (now && was && now.max != null && was.max != null) {
+    const f1 = (n) => n.toFixed(1);
+    const pct = (d) => (d.open ? (d.over180 / d.open) * 100 : 0);
+    const money = (n) => Math.round(n).toLocaleString('en-US');
+    lines.push('', `📊 ภาพรวม ${thaiShort(prev.date)} → ${thaiShort(cur.date)}`,
+      `• อายุค้างเฉลี่ย ${f1(was.avg1)} → ${f1(now.avg1)} วัน (${now.avg1 - was.avg1 >= 0 ? '+' : ''}${f1(now.avg1 - was.avg1)}) · สูงสุด ${was.max} → ${now.max} วัน`,
+      `• ค้าง > 365 วัน ${was.over365} → ${now.over365} (${sign(now.over365 - was.over365)}) · > 180 วัน ${was.over180} → ${now.over180} (${sign(now.over180 - was.over180)}) = ${f1(pct(now))}%`,
+      `• มูลค่างานประเมิน ${money(was.value)} → ${money(now.value)} บาท (${now.value - was.value >= 0 ? '+' : ''}${money(now.value - was.value)}) · ${was.valued} → ${now.valued} WO`);
   }
   lines.push('');
 
@@ -101,7 +116,9 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   // 3) Per plant
   for (const id of ids) {
     const n = plantNumbers(cur, prev, [id]);
-    lines.push(`🏭 PP${id}: เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${sign(n.delta)})` : ''}`);
+    const base = was?.plants?.[id];
+    const delta = base != null ? n.open - base : n.delta;
+    lines.push(`🏭 PP${id}: เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${delta != null ? ` (${sign(delta)})` : ''}`);
   }
   lines.push('');
 
