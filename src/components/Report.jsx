@@ -216,6 +216,9 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   // Opened on this day = Actual Start that day (⚡ = also a new WO in the file: inserted during the day).
   // Stats saved before Oct 2026 have no "opened" list; their new-WO list stands in.
   const opened = (cur?.opened || cur?.new || []).filter(inScope).map(toItem).sort(byInsert);
+  // Entered the backlog today: open now and not in the backlog of the previous file (team's comparison sheet).
+  const entered = (cur?.entered || []).filter(inScope).map(toItem)
+    .map((f) => ({ ...f, age: f.row ? ageDays(f.row, today) : null }));
   // New WO numbers in the file (can include work started on earlier days, e.g. after a weekend).
   const fresh = (cur?.new || []).filter(inScope)
     .map(([wo, plant, t, at, mid]) => ({ wo, plant, team: t, at, mid: mid === 1, row: byWo.get(String(wo)) }))
@@ -244,7 +247,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
     const lines = [
       `📋 รายงาน WO P1 ${dayLabel(cur.date)} ${pd(cur.date).getFullYear() + 543} (อัปเดต ${cur.rounds.map((r) => hm(r.at)).join(', ')} น.)`,
       scope,
-      `เปิดงาน (Actual Start วันนี้) ${tot.opened}${tot.inserted ? ` (⚡แทรกระหว่างวัน ${tot.inserted})` : ''} · WO ใหม่ในไฟล์ ${tot.new} · เริ่มงาน ${tot.started} · เสร็จรอปิด ${tot.finished} · CLOSED ${tot.closed}${tot.assumed ? ` (Status ${tot.closedStatus} + ไม่พบในไฟล์ ${tot.assumed})` : ''}`,
+      `เปิดงาน (Actual Start วันนี้) ${tot.opened}${tot.inserted ? ` (⚡แทรกระหว่างวัน ${tot.inserted})` : ''} · เข้า Backlog ใหม่ ${tot.entered ?? '-'} · WO ใหม่ในไฟล์ ${tot.new} · เริ่มงาน ${tot.started} · เสร็จรอปิด ${tot.finished} · CLOSED ${tot.closed}${tot.assumed ? ` (Status ${tot.closedStatus} + ไม่พบในไฟล์ ${tot.assumed})` : ''}`,
       ...rounds.filter((r) => !r.baseline).map((r) => `  รอบ ${hm(r.at)} น.: เปิด ${r.opened}${r.inserted ? ` (แทรก ${r.inserted})` : ''} · เริ่ม ${r.started} · เสร็จรอปิด ${r.finished} · CLOSED ${r.closed}`),
       `คงค้าง ${tot.open} WO${openDelta != null ? ` (${signed(openDelta)} จาก ${dayLabel(prev.date)})` : ''} · ค้างเกิน 30 วัน ${tot.a90 + tot.aMore}`,
       ...(tm ? [] : byTeam.filter((t) => t.open || t.closed || t.started).map((t) => `• ${t.label} (${t.team}): ค้าง ${t.open} (เกิน 30 วัน ${t.a90 + t.aMore}) · เริ่ม ${t.started} · ปิด ${t.closed}`)),
@@ -299,7 +302,8 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
 
       <p className="rep-note">นับตาม<b>เวลาที่ระบบเห็นการเปลี่ยนแปลงในไฟล์ CMMS</b> (เทียบไฟล์รอบก่อน) — เช่น งานที่เพิ่งกดปิดวันนี้นับเป็น CLOSED วันนี้ แม้ Actual Finish จะเป็นวันก่อน · ผลงานตามวันที่ทำงานจริงดูที่ "ผลงาน P1 สะสม" ด้านบน</p>
       <div className="rep-tiles">
-        <Tile label="เปิดงาน (Actual Start วันนี้)" value={tot.opened} sub={`${tot.inserted ? `⚡ แทรก ${tot.inserted} · ` : ''}WO ใหม่ในไฟล์ ${tot.new}`} tone={tot.inserted ? 'insert' : ''} />
+        <Tile label="WO ใหม่ที่เข้า Backlog" value={tot.entered ?? '—'} sub={tot.entered == null ? 'เริ่มนับตั้งแต่อัปโหลดรอบถัดไป' : `งานค้างใหม่ · WO ใหม่ในไฟล์ทั้งหมด ${tot.new}`} />
+        <Tile label="เปิดงานจริง (Actual Start วันนี้)" value={tot.opened} sub={tot.inserted ? `⚡ แทรกระหว่างวัน ${tot.inserted}` : 'ไม่มีงานแทรก'} tone={tot.inserted ? 'insert' : ''} />
         <Tile label="เริ่มงาน (Start)" value={tot.started} tone="start" />
         <Tile label="เสร็จ / รอปิด" value={tot.finished} />
         <Tile label="CLOSED (พบในไฟล์วันนี้)" value={tot.closed} tone="close" sub={tot.assumed ? `Status ${tot.closedStatus} · ไม่พบในไฟล์ ${tot.assumed}` : cur.baseline && !tot.closed ? 'วันเริ่มต้น' : undefined} />
@@ -321,11 +325,11 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           <div className="rep-sub">สรุปรายโรง · {cur.rounds?.length ? roundLabel(cur.rounds.at(-1).at) : ''} <span className="muted">(ข้อมูลจาก CMMS · สะสมทั้งวัน)</span></div>
           <div className="rep-table-wrap">
             <table className="rep-table">
-              <thead><tr><th>โรง</th><th>เปิดงาน</th><th>⚡แทรก</th><th>เสร็จ/ปิด</th><th>คงค้าง</th><th>±เมื่อวาน</th></tr></thead>
+              <thead><tr><th>โรง</th><th>เข้า Backlog</th><th>เปิดงาน</th><th>⚡แทรก</th><th>เสร็จ/ปิด</th><th>คงค้าง</th><th>±เมื่อวาน</th></tr></thead>
               <tbody>
                 {[...ids.map((id) => [`PP${id}`, plantNumbers(cur, prev, [id])]), ...(ids.length > 1 ? [['รวม', plantNumbers(cur, prev, ids)]] : [])].map(([label, n]) => (
                   <tr key={label} className={label === 'รวม' ? 'is-total' : ''}>
-                    <th>{label}</th><td>{n.opened}</td><td>{n.inserted}</td><td title={`CLOSED ${n.closed} · เสร็จรอปิด ${n.waitClose}`}>{n.done}</td><td><b>{n.open}</b></td><td>{n.delta == null ? '—' : signed(n.delta)}</td>
+                    <th>{label}</th><td>{n.entered ?? '—'}</td><td>{n.opened}</td><td>{n.inserted}</td><td title={`CLOSED ${n.closed} · เสร็จรอปิด ${n.waitClose}`}>{n.done}</td><td><b>{n.open}</b></td><td>{n.delta == null ? '—' : signed(n.delta)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -373,6 +377,17 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
                 <span className="rep-desc">{f.row?.desc || ''}</span>
               </li>
             )} />
+          {cur.entered && (
+            <FoldList key={`e${cur.date}`} title="WO ใหม่ที่เข้า Backlog" note="งานค้าง (ยังไม่เสร็จ/ไม่ปิด) ที่ไม่อยู่ใน Backlog ของไฟล์รอบก่อน — เลข WO ใหม่ หรือกลับมาค้างอีกครั้ง" items={entered} tone="rep-new" startOpen
+              render={(f) => (
+                <li key={f.wo} title={f.row?.desc || ''}>
+                  <span className="rep-age">🆕</span>
+                  <span className="rep-wo">{f.wo}</span>
+                  <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'}{f.age != null ? ` · ค้าง ${f.age} วัน` : ''}</span>
+                  <span className="rep-desc">{f.row?.desc || ''}</span>
+                </li>
+              )} />
+          )}
           <FoldList key={`n${cur.date}`} title="WO ใหม่ในไฟล์ (เทียบไฟล์รอบก่อน)" note="รวมงานที่ Actual Start วันก่อน เช่น งานที่เปิดช่วงเสาร์–อาทิตย์" items={fresh} tone="rep-new"
             render={(f) => (
               <li key={f.wo} className={f.mid ? 'is-insert' : ''} title={f.row?.desc || ''}>

@@ -251,7 +251,7 @@ export function dayEvents(prevRows, nextRows, day) {
   const nextLatest = latestSeen(nextRows);
   const old = new Map((prevRows || []).map((r) => [normWo(r.wo), r]));
   const hasPrev = old.size > 0;
-  const ev = { opened: [], new: [], started: [], finished: [], closed: [], assumed: [] };
+  const ev = { opened: [], entered: [], new: [], started: [], finished: [], closed: [], assumed: [] };
   const present = nextRows.filter((r) => presentIn(r, nextLatest));
   const presentKeys = new Set(present.map((r) => normWo(r.wo)));
   for (const prev of old.values()) {
@@ -265,6 +265,8 @@ export function dayEvents(prevRows, nextRows, day) {
     if (prev && !presentIn(prev, prevLatest) && groupOf(r.status).key !== 'closed') ev.back.push(normWo(r.wo));
     const g = groupOf(r.status).key;
     const pg = prev ? groupOf(prev.status).key : null;
+    // Entered the backlog = open now, and not open in the previous file (new WO number, or back from finished).
+    if (hasPrev && !isClosedGroup(g) && (!prev || isClosedGroup(pg) || !presentIn(prev, prevLatest))) ev.entered.push(tuple(r));
     // Opened on the day = Actual Start is that day (team rule, same as the history report); 5th field = new in the file.
     if (r.actualStart === day) ev.opened.push([...tuple(r), !prev && hasPrev ? 1 : 0]);
     // New in the file; the 5th field marks "inserted during the day" = its Actual Start is the upload day itself.
@@ -301,7 +303,7 @@ export function openSnapshot(rows, today) {
  * Fold one upload into that day's stats document. Event lists are unions by WO, so uploading at 09:30
  * and again at 16:00 never counts a WO twice; the open snapshot is the latest of the day.
  */
-const EVENT_KEYS = ['opened', 'new', 'started', 'finished', 'closed', 'assumed'];
+const EVENT_KEYS = ['opened', 'entered', 'new', 'started', 'finished', 'closed', 'assumed'];
 const noEvents = () => Object.fromEntries(EVENT_KEYS.map((k) => [k, []]));
 
 export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseline = false, dash = null }) {
@@ -348,6 +350,7 @@ export function roundTotals(doc, ids, team = null, wlOf = null) {
     return {
       at: r.at, fileName: r.fileName, baseline: !!r.baseline,
       opened: doc.opened ? mine('opened').length : mine('new').length,
+      entered: doc.entered ? mine('entered').length : null,
       new: mine('new').length, inserted: (doc.opened ? mine('opened') : mine('new')).filter((t) => ins.has(normWo(t[0]))).length,
       started: mine('started').length, finished: mine('finished').length, closed: mine('closed').length, missing: mine('assumed').length,
     };
@@ -360,13 +363,14 @@ export function roundTotals(doc, ids, team = null, wlOf = null) {
  */
 export function statTotals(doc, ids, team = null, wlOf = null) {
   const keep = (plant, t, wo, wl) => ids.includes(Number(plant)) && t !== 'OTHER' && scopeMatch(team, t, wl || (wo != null ? wlOf?.(wo) : ''));
-  const t = { opened: 0, new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
+  const t = { opened: 0, entered: 0, new: 0, inserted: 0, started: 0, finished: 0, closed: 0, assumed: 0, closedStatus: 0, open: 0, finish: 0, a7: 0, a30: 0, a90: 0, aMore: 0 };
   if (!doc) return t;
   for (const k of EVENT_KEYS) t[k] = (doc[k] || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl)).length;
   const ins = insertedWos(doc);
   t.inserted = (doc.opened || doc.new || []).filter(([wo, p, tm, , , wl]) => keep(p, tm, wo, wl) && ins.has(normWo(wo))).length;
   t.closedStatus = MISSING_IS_CLOSED ? t.closed - t.assumed : t.closed; // Status (column L) → CLOSED
   if (!doc.opened) t.opened = t.new; // stats saved before "opened" existed (Oct 2026) only know new WOs
+  if (!doc.entered) t.entered = null; // saved before "entered the backlog" was recorded (6 Oct 2026)
   for (const [key, o] of Object.entries(doc.open || {})) {
     const [p, tm, wl = ''] = key.split('|');
     if (!keep(p, tm, null, wl)) continue;

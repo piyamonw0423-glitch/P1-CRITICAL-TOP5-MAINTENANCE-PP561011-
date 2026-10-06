@@ -17,7 +17,7 @@ export function plantNumbers(cur, prev, ids) {
   const t = statTotals(cur, ids);
   const keep = ([, p, tm]) => ids.includes(Number(p)) && tm !== 'OTHER';
   const done = new Set([...(cur?.finished || []), ...(cur?.closed || [])].filter(keep).map((x) => String(x[0])));
-  return { opened: t.opened, newInFile: t.new, inserted: t.inserted, done: done.size, closed: t.closed, waitClose: t.finished, open: t.open, delta: prev ? t.open - statTotals(prev, ids).open : null };
+  return { opened: t.opened, entered: t.entered, newInFile: t.new, inserted: t.inserted, done: done.size, closed: t.closed, waitClose: t.finished, open: t.open, delta: prev ? t.open - statTotals(prev, ids).open : null };
 }
 
 /**

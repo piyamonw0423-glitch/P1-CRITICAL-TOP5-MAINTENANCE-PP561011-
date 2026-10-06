@@ -75,21 +75,33 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   // 2) Per plant
   for (const id of ids) {
     const n = plantNumbers(cur, prev, [id]);
-    lines.push(`🏭 PP${id}: เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${sign(n.delta)})` : ''}`);
+    lines.push(`🏭 PP${id}: ${n.entered != null ? `เข้า Backlog ${n.entered} · ` : ''}เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${sign(n.delta)})` : ''}`);
   }
   lines.push('');
 
-  // 3) Priority 1 today: opened (with names) and closed
-  const ins = insertedWos(cur);
-  const opened = (cur.opened || cur.new || []).filter((x) => ids.includes(Number(x[1])) && x[2] !== 'OTHER')
-    .sort((a, b) => ins.has(normWo(b[0])) - ins.has(normWo(a[0])));
-  lines.push(`📌 Priority 1 วันนี้: เปิดงาน ${t.opened} WO${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''} · CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิด ${t.finished} WO`);
-  for (const [wo, plant, team] of opened.slice(0, 15)) {
+  // 3) Priority 1 today: WOs that entered the backlog, WOs actually started (Actual Start), closed
+  const inScope = (x) => ids.includes(Number(x[1])) && x[2] !== 'OTHER';
+  const woLine = (mark, [wo, plant, team]) => {
     const r = byWo.get(normWo(wo));
-    lines.push(`${ins.has(normWo(wo)) ? '⚡' : '•'} ${wo} PP${plant} ${team}${r?.status ? ` ${r.status}` : ''} – ${String(r?.desc || '').slice(0, 55)}`);
+    return `${mark} ${wo} PP${plant} ${team}${r?.status ? ` ${r.status}` : ''} – ${String(r?.desc || '').slice(0, 55)}`;
+  };
+  const LIST_MAX = 10;
+  const more = (list) => (list.length > LIST_MAX ? [`…และอีก ${list.length - LIST_MAX} รายการ (ดูในเว็บ)`] : []);
+  lines.push('📌 Priority 1 วันนี้');
+  if (cur.entered) {
+    const entered = cur.entered.filter(inScope);
+    lines.push(`🆕 WO ใหม่ที่เข้า Backlog ${entered.length} WO (งานค้างที่ไม่อยู่ใน Backlog รอบก่อน)`);
+    for (const x of entered.slice(0, LIST_MAX)) lines.push(woLine('•', x));
+    lines.push(...more(entered));
   }
-  if (opened.length > 15) lines.push(`…และอีก ${opened.length - 15} รายการ (ดูในเว็บ)`);
+  const ins = insertedWos(cur);
+  const opened = (cur.opened || cur.new || []).filter(inScope)
+    .sort((a, b) => ins.has(normWo(b[0])) - ins.has(normWo(a[0])));
+  lines.push(`▶️ เปิดงานจริง (Actual Start วันนี้) ${t.opened} WO${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''}`);
+  for (const x of opened.slice(0, LIST_MAX)) lines.push(woLine(ins.has(normWo(x[0])) ? '⚡' : '•', x));
+  lines.push(...more(opened));
   if (!opened.length) lines.push('• วันนี้ยังไม่มีงานที่ Actual Start เป็นวันนี้');
+  lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิด ${t.finished} WO`);
   lines.push('');
 
   // 4) What still needs pushing (rules on the stored summaries)
