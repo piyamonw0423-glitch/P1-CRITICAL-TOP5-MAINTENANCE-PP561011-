@@ -239,7 +239,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
       <section className="panel rep" aria-label="รายงานประจำวัน">
         <div className="panel-head">รายงานประจำวัน (CMMS)</div>
         <p className="rep-empty">ระบบจะเริ่มบันทึกตัวเลข WO ใหม่ / เริ่มงาน / เสร็จรอปิด / CLOSED / คงค้าง ตั้งแต่การอัปโหลดไฟล์ CMMS ครั้งถัดไป
-          (แนะนำวันละ 2 รอบ 09:30 (เริ่มงาน) และ 16:30 (จบงาน) — อัปโหลดหลายครั้งในวันเดียวไม่นับซ้ำ)</p>
+          (แนะนำอัปโหลดวันละครั้งประมาณ 16:30 แล้วส่งข้อความสรุปประจำวัน — อัปโหลดหลายครั้งในวันเดียวไม่นับซ้ำ)</p>
       </section>
     );
   }
@@ -295,8 +295,8 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           <select className="rep-select" value={cur.date} onChange={(e) => setDate(e.target.value)} aria-label="เลือกวัน">
             {[...days].reverse().map((d) => <option key={d.date} value={d.date}>{dayLabel(d.date)} {pd(d.date).getFullYear() + 543}</option>)}
           </select>
-          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('round')} title="ข้อความเช้า: เทียบกับวันรายงานก่อนหน้า (ทุกโรง)">{copied === 'round' ? 'คัดลอกแล้ว ✓' : 'ข้อความเช้า (LINE)'}</button>
-          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('evening')} disabled={!canEvening} title={canEvening ? 'ข้อความเย็น: เทียบกับรอบเช้าของวันเดียวกัน — ปิดงานไปกี่ WO' : 'ต้องมีการอัปโหลดอย่างน้อย 2 รอบในวันนี้ (เช้า + เย็น)'}>{copied === 'evening' ? 'คัดลอกแล้ว ✓' : 'ข้อความเย็น (LINE)'}</button>
+          <button type="button" className="btn btn-save rep-copy" onClick={() => copy('round')} title="สรุปประจำวัน เทียบกับวันรายงานก่อนหน้า (ทุกโรง) — ข้อความเดียวกับที่ส่ง LINE">{copied === 'round' ? 'คัดลอกแล้ว ✓' : 'ข้อความสรุปประจำวัน (LINE)'}</button>
+          {canEvening && <button type="button" className="btn btn-ghost rep-copy" onClick={() => copy('evening')} title="เมื่อวันนี้อัปโหลดมากกว่า 1 รอบ: เทียบรอบล่าสุดกับรอบแรกของวัน — ปิดงานไปกี่ WO">{copied === 'evening' ? 'คัดลอกแล้ว ✓' : 'ความคืบหน้าระหว่างวัน'}</button>}
           <button type="button" className="btn btn-ghost rep-copy" onClick={() => copy('detail')} title="รายการ WO ทั้งหมดของวัน">{copied === 'detail' ? 'คัดลอกแล้ว ✓' : 'คัดลอกรายละเอียด'}</button>
         </span>
       </div>

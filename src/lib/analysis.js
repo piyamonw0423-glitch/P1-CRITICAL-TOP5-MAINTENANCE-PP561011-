@@ -45,14 +45,14 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   cur = withEntered(cur, backlog, latest); // "entered" of the latest day comes from the WO list itself
   const ids = PLANT_IDS;
   const now = cur.dash || (backlog ? compactDash(backlog.rows, today) : null);
-  // Compare morning with morning (like the team's day-to-day sheet): the previous day's first upload when known.
-  const was = prev?.dashFirst || prev?.dash || null;
+  // Daily report (team reports once a day, ~16:30): compare with the previous report day's last upload.
+  const was = prev?.dash || prev?.dashFirst || null;
   const byWo = new Map((backlog?.rows || []).map((r) => [normWo(r.wo), r]));
   const t = statTotals(cur, ids);
   const p = prev ? statTotals(prev, ids) : null;
   const last = cur.rounds?.at(-1);
-  const vsLabel = prev ? `เทียบกับ${prev.dashFirst && (prev.rounds || []).length > 1 ? 'รอบเช้า ' : ' '}${thaiShort(prev.date)}` : 'วันแรกที่บันทึก';
-  const lines = [`📊 Update : WO Backlog P1 · ${thaiShort(cur.date)} (${vsLabel})`, ''];
+  const vsLabel = prev ? `เทียบกับ ${thaiShort(prev.date)}` : 'วันแรกที่บันทึก';
+  const lines = [`📊 สรุปประจำวัน : WO Backlog P1 · ${thaiShort(cur.date)} (${vsLabel})`, ''];
 
   // 1) Open backlog vs previous day
   const openNow = now ? now.open : t.open;
@@ -109,7 +109,10 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   const ins = insertedWos(cur);
   const opened = (cur.opened || cur.new || []).filter(inScope)
     .sort((a, b) => ins.has(normWo(b[0])) - ins.has(normWo(a[0])));
-  void opened; // the morning message keeps only the counts (plant lines); the evening message lists them
+  lines.push(`▶️ เปิดงานจริงวันนี้ (Actual Start) ${t.opened} WO${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''}`);
+  for (const x of opened.slice(0, LIST_MAX)) lines.push(woLine(ins.has(normWo(x[0])) ? '⚡' : '•', x));
+  lines.push(...more(opened));
+  if (!opened.length) lines.push('• ไม่มีงานที่ Actual Start เป็นวันนี้');
   lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิดวันนี้ ${t.finished} WO`);
   lines.push('');
 
@@ -251,7 +254,7 @@ export function eveningText({ cur, backlog = null, url = '', today = new Date() 
   return lines.join('\n');
 }
 
-/** The message for the latest upload: evening progress after a morning upload, else the morning update. */
+/** The LINE message for the latest upload: the daily summary vs the previous report day (once a day, ~16:30). */
 export function reportText(args) {
-  return isEveningReport(args.cur) ? eveningText(args) : analysisText(args);
+  return analysisText(args);
 }

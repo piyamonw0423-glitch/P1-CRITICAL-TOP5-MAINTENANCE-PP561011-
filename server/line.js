@@ -53,7 +53,7 @@ const thaiParts = (ms) => { const d = new Date(ms + 7 * 3600e3); return { h: d.g
 const hm = (iso) => { const { h, m } = thaiParts(Date.parse(iso)); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
 const thaiDate = (day) => { const d = pd(day); return `${d.getDate()} ${TH_M[d.getMonth()]} ${d.getFullYear() + 543}`; };
 
-/** Morning update vs the previous report day, or the evening progress vs the morning upload (see reportText). */
+/** Daily summary of the latest upload vs the previous report day (reported once a day, ~16:30). */
 export const summaryText = ({ days, backlog, url }) => {
   const today = new Date(Date.now() + 7 * 3600e3);
   return reportText({ cur: days.at(-1), prev: days.length > 1 ? days.at(-2) : null, backlog, url, today: new Date(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) });
@@ -74,20 +74,19 @@ export async function handleWebhook(env, db, body, url) {
 }
 
 /**
- * Cron: remind when the round's upload is missing — morning run checks for an upload since 06:00,
- * afternoon run since 13:00 (Thai time). Returns 'sent' | 'skipped'.
+ * Cron (16:45 Thai, Mon–Sat): remind when today's CMMS file has not been uploaded yet — the team reports once a
+ * day in the evening, so any upload since 00:00 today counts. Returns 'sent' | 'skipped'.
  */
 export async function remindIfNoUpload(env, db, scheduledTime, url) {
   const { h } = thaiParts(scheduledTime);
-  const morning = h < 12;
   const dayStartUtc = Math.floor((scheduledTime + 7 * 3600e3) / 864e5) * 864e5 - 7 * 3600e3;
-  const since = dayStartUtc + (morning ? 6 : 13) * 3600e3;
+  const since = dayStartUtc;
   const last = (await db.backlog())?.uploadedAt;
   if (last && Date.parse(last) >= since) return 'skipped';
   await linePush(env, [
-    `⏰ ยังไม่ได้อัปโหลดไฟล์ CMMS รอบ${morning ? 'เช้า 09:30 น. (เริ่มงาน)' : 'เย็น 16:30 น. (จบงาน)'} วันนี้`,
+    `⏰ ยังไม่ได้อัปโหลดไฟล์ CMMS ประจำวันนี้ (รอบ 16:30 น.)`,
     `อัปโหลดล่าสุด: ${last ? `${thaiDate(new Date(Date.parse(last) + 7 * 3600e3).toISOString().slice(0, 10))} ${hm(last)} น.` : 'ยังไม่เคย'}`,
-    'รายงานประจำวันจะอัปเดตหลังอัปโหลด (โหมดแก้ไข → อัปโหลด WO Backlog)',
+    'สรุปประจำวันจะส่งเข้า LINE หลังอัปโหลด (โหมดแก้ไข → อัปโหลด WO Backlog)',
     ...(url ? [`🔗 ${url}`] : []),
   ].join('\n'));
   return 'sent';

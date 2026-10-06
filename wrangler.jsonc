@@ -29,7 +29,7 @@
   },
   // Link used in LINE messages sent by the cron reminder (requests use their own origin).
   "vars": { "PUBLIC_URL": "https://p1-critical-top5-maintenance-pp561011.piyamon-w0423.workers.dev/" },
-  // LINE reminder if the CMMS file was not uploaded: 09:45 and 16:45 Thai time (02:45 / 09:45 UTC), Mon–Sat.
-  "triggers": { "crons": ["45 2 * * MON-SAT", "45 9 * * MON-SAT"] },
+  // LINE reminder if the day's CMMS file (reported once a day at ~16:30) was not uploaded: 16:45 Thai time (09:45 UTC), Mon–Sat.
+  "triggers": { "crons": ["45 9 * * MON-SAT"] },
   "observability": { "enabled": true }
 }
