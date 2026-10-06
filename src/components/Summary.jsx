@@ -47,10 +47,10 @@ export function KpiRow({ kpi }) {
         <div className="kpi-head"><span className="ico"><Icon name="alert" /></span><span className="kpi-label">{cmms ? 'WO P1 ทั้งหมด' : 'P1 ทั้งหมด'}</span></div>
         <div className="kpi-body">
           <div className="kpi-nums"><span className="kpi-value">{kpi.total}</span><span className="kpi-unit">{cmms ? 'WO' : 'งาน'}</span></div>
-          <div className="kpi-foot">{cmms ? `ใน CMMS · ${kpi.plants} โรง · Top 5 ติดตาม ${kpi.top5} งาน` : `${kpi.plants} โรง`}</div>
+          <div className="kpi-foot">{cmms ? `ในไฟล์ CMMS ล่าสุด · งานค้าง ${kpi.doing + kpi.stuck} WO · ${kpi.plants} โรง` : `${kpi.plants} โรง`}</div>
         </div>
       </div>
-      <KpiCard tone="done" icon="check" label={cmms ? 'เสร็จ / ปิดแล้ว' : 'เสร็จแล้ว'} value={kpi.done} pct={kpi.donePct} of={`จาก ${kpi.total} ${unit}`} />
+      <KpiCard tone="done" icon="check" label={cmms ? 'เสร็จ / รอปิด' : 'เสร็จแล้ว'} value={kpi.done} pct={kpi.donePct} of={`จาก ${kpi.total} ${unit}`} />
       <KpiCard tone="doing" icon="clock" label="กำลังดำเนินการ" value={kpi.doing} pct={kpi.doingPct} of={`จาก ${kpi.total} ${unit}`} />
       <KpiCard tone="stuck" icon="alert" label={cmms ? 'รอดำเนินการ / ค้าง' : 'ค้าง / เกินกำหนด'} value={kpi.stuck} pct={kpi.stuckPct} of={`จาก ${kpi.total} ${unit}`} />
     </div>

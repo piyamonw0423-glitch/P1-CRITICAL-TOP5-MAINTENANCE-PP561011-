@@ -117,12 +117,15 @@ export function dashboardView(data, filterKey, t, backlog = null) {
     .map((id) => ({ id, n: counts(data.jobs.filter((j) => j.plant === id), t).stuck }))
     .sort((a, b) => b.n - a.n);
   const overdue = open.filter((j) => pd(j.end) < t).sort((a, b) => pd(a.end) - pd(b.end));
-  // Headline numbers: every P1 work order in the CMMS snapshot when there is one, else the Top 5 jobs.
-  const woRows = backlog ? backlog.rows.filter((r) => ids.includes(r.plant)) : null;
+  // Headline numbers: the P1 work orders in the latest CMMS file when there is one, else the Top 5 jobs.
+  // WOs that dropped out of earlier files stay in the backlog doc (closed) but must not inflate the totals —
+  // so the KPI agrees with the daily report and the WO Backlog dashboard (open = doing + stuck).
+  const latestAll = backlog ? latestSeen(backlog.rows) : '';
+  const woRows = backlog ? backlog.rows.filter((r) => ids.includes(r.plant) && presentIn(r, latestAll)) : null;
   let kpi;
   if (woRows) {
     const k = { done: 0, doing: 0, stuck: 0 };
-    const latest = latestSeen(backlog.rows);
+    const latest = latestAll;
     woRows.forEach((r) => { k[kpiBucket(effGroup(r, latest))]++; });
     const wp = (n) => pctOf(n, woRows.length);
     kpi = { source: 'cmms', total: woRows.length, plants: ids.length, top5: jobs.length, ...k, donePct: wp(k.done), doingPct: wp(k.doing), stuckPct: wp(k.stuck) };
@@ -130,7 +133,7 @@ export function dashboardView(data, filterKey, t, backlog = null) {
     kpi = { source: 'top5', total: jobs.length, plants: ids.length, ...c, donePct: pc(c.done), doingPct: pc(c.doing), stuckPct: pc(c.stuck) };
   }
   const highlights = [
-    ...(woRows ? [{ k: `WO P1 ใน CMMS ${kpi.total} WO`, v: `· เสร็จ/ปิด ${kpi.done} (${kpi.donePct}%) · กำลังดำเนินการ ${kpi.doing} (${kpi.doingPct}%) · รอ/ค้าง ${kpi.stuck} (${kpi.stuckPct}%)` }] : []),
+    ...(woRows ? [{ k: `WO P1 ในไฟล์ล่าสุด ${kpi.total} WO · ค้าง ${kpi.doing + kpi.stuck}`, v: `· เสร็จ/รอปิด ${kpi.done} (${kpi.donePct}%) · กำลังดำเนินการ ${kpi.doing} (${kpi.doingPct}%) · รอ/ค้าง ${kpi.stuck} (${kpi.stuckPct}%)` }] : []),
     { k: `Top 5 ติดตาม ${jobs.length} งาน`, v: `· เสร็จ ${c.done} (${pc(c.done)}%) · กำลังทำ ${c.doing} (${pc(c.doing)}%) · ค้าง ${c.stuck} (${pc(c.stuck)}%)` },
     { k: 'โรงที่เสี่ยงสุด:', v: risk.filter((r) => r.n > 0).slice(0, 2).map((r) => `โรง ${r.id} (ค้าง ${r.n} งาน)`).join(' และ ') || 'ไม่มีงานค้าง' },
     { k: 'ติดปัญหาหลัก:', v: blockers.slice(0, 3).map((b) => `${b.label} ${b.count} งาน`).join(' · ') || 'ไม่มี' },
