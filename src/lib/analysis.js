@@ -3,12 +3,13 @@
 // Every upload stores a compact summary in the day's stats doc (`dash`) so the next day can be compared with it.
 import { PLANT_IDS } from './data.js';
 import { TH_M, pd } from './dates.js';
-import { STATUS_GROUPS, TEAMS, insertedWos, normWo, statTotals } from './cmms.js';
+import { STATUS_GROUPS, TEAMS, groupOf, insertedWos, normWo, statTotals } from './cmms.js';
 import { backlogDashboard } from './backlogDash.js';
 import { plantNumbers, roundLabel } from './roundReport.js';
 
 const GROUP = Object.fromEntries(STATUS_GROUPS.map((g) => [g.key, g]));
 const TEAM_KEYS = TEAMS.filter((t) => t.k !== 'OTHER').map((t) => t.k);
+const GROUP_OF = (r) => (r ? groupOf(r.status).key : null);
 
 /** Compact snapshot of the open backlog (all plants) kept in stats/<day>.dash — a few hundred bytes. */
 export function compactDash(rows, today) {
@@ -72,24 +73,18 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   }
   lines.push('');
 
-  // 2) Per plant
-  for (const id of ids) {
-    const n = plantNumbers(cur, prev, [id]);
-    lines.push(`🏭 PP${id}: ${n.entered != null ? `เข้า Backlog ${n.entered} · ` : ''}เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${sign(n.delta)})` : ''}`);
-  }
-  lines.push('');
-
-  // 3) Priority 1 today: WOs that entered the backlog, WOs actually started (Actual Start), closed
+  // 2) Priority 1 today: WOs that entered the backlog, WOs actually started (Actual Start), closed
   const inScope = (x) => ids.includes(Number(x[1])) && x[2] !== 'OTHER';
+  const rowOf = (wo) => byWo.get(normWo(wo));
   const woLine = (mark, [wo, plant, team]) => {
-    const r = byWo.get(normWo(wo));
+    const r = rowOf(wo);
     return `${mark} ${wo} PP${plant} ${team}${r?.status ? ` ${r.status}` : ''} – ${String(r?.desc || '').slice(0, 55)}`;
   };
   const LIST_MAX = 10;
   const more = (list) => (list.length > LIST_MAX ? [`…และอีก ${list.length - LIST_MAX} รายการ (ดูในเว็บ)`] : []);
+  const entered = cur.entered ? cur.entered.filter(inScope) : null;
   lines.push('📌 Priority 1 วันนี้');
-  if (cur.entered) {
-    const entered = cur.entered.filter(inScope);
+  if (entered) {
     lines.push(`🆕 WO ใหม่ที่เข้า Backlog ${entered.length} WO (งานค้างที่ไม่อยู่ใน Backlog รอบก่อน)`);
     for (const x of entered.slice(0, LIST_MAX)) lines.push(woLine('•', x));
     lines.push(...more(entered));
@@ -101,10 +96,17 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   for (const x of opened.slice(0, LIST_MAX)) lines.push(woLine(ins.has(normWo(x[0])) ? '⚡' : '•', x));
   lines.push(...more(opened));
   if (!opened.length) lines.push('• วันนี้ยังไม่มีงานที่ Actual Start เป็นวันนี้');
-  lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิด ${t.finished} WO`);
+  lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิดวันนี้ ${t.finished} WO`);
   lines.push('');
 
-  // 4) What still needs pushing (rules on the stored summaries)
+  // 3) Per plant
+  for (const id of ids) {
+    const n = plantNumbers(cur, prev, [id]);
+    lines.push(`🏭 PP${id}: เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${n.delta != null ? ` (${sign(n.delta)})` : ''}`);
+  }
+  lines.push('');
+
+  // 4) What still needs pushing (rules on the stored summaries) and what the team should do about it
   if (now) {
     const warn = [];
     const d365 = was ? now.over365 - was.over365 : null;
@@ -125,13 +127,21 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     }
     if (warn.length) lines.push('⚠️ จุดที่ยังต้องเร่ง', ...warn, '');
 
-    const asks = [];
+    // Action plan: each line = number to clear + who + what to do.
+    const acts = [];
     if (now.over365) {
       const who = now.appr365[0];
-      asks.push(`ช่วยเคลียร์งานค้างเกิน 1 ปีก่อน${who ? ` โดยเฉพาะ ${who[1]} WO ที่รอคุณ ${firstName(who[0])}` : ''}`);
+      acts.push(`เคลียร์งานค้างเกิน 1 ปี ${now.over365} WO ก่อน — เจ้าของงานทบทวนว่าจะดำเนินการต่อหรือยกเลิก${who ? ` (${who[1]} WO รอคุณ ${firstName(who[0])} พิจารณา/อนุมัติ)` : ''}`);
     }
-    if (topTeam?.[1]) asks.push(`ทีม ${topTeam[0]} ช่วยทบทวนงานที่ค้างเกิน 180 วัน`);
-    if (asks.length) lines.push('รบกวนเจ้าของงานช่วยเร่งเคลียร์ค่ะ', ...asks, '');
+    if (topTeam?.[1]) acts.push(`ทีม ${topTeam[0]} ทบทวนงานค้างเกิน 180 วัน ${topTeam[1]} WO — อัปเดตแผน วันเข้างาน หรือปิดงานที่ไม่จำเป็น`);
+    if (entered?.length) {
+      const waitPlan = entered.filter((x) => GROUP_OF(rowOf(x[0])) === 'plan').length;
+      acts.push(`งานเข้าใหม่ ${entered.length} WO${waitPlan ? ` (รอวางแผน/อนุมัติ ${waitPlan})` : ''} — วางแผนและมอบหมายผู้รับผิดชอบให้ชัดภายในสัปดาห์นี้`);
+    }
+    if (t.finish) acts.push(`งานเสร็จรอปิดสะสม ${t.finish} WO (FINISH/WACCEPT/COMP) — ตรวจรับและปิดงาน (CLOSE) ในระบบให้ครบ`);
+    const parts = now.groups.material?.[0];
+    if (parts) acts.push(`รออะไหล่ ${parts} WO — ติดตามการจัดหาอะไหล่และแจ้งวันที่คาดว่าจะได้รับ`);
+    if (acts.length) lines.push('🎯 แนวทางดำเนินงาน', ...acts.map((x, i) => `${i + 1}. ${x}`), '', 'รบกวนเจ้าของงานช่วยเร่งเคลียร์ค่ะ 🙏', '');
   }
   lines.push(`📌 ข้อมูลจาก CMMS${last?.fileName ? ` (${last.fileName})` : ''}`);
   if (url) lines.push(`🔗 Data link : ${url}`);
