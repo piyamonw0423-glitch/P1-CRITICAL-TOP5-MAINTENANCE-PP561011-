@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, STORAGE_KEY, commitData, counts, loadData } from './data.js';
-import { iso, today0 } from './dates.js';
+import { iso, pd, today0 } from './dates.js';
 import { sameWo } from './dedupe.js';
 import { applyDailyToHist, baselineStats, dayEvents, foldDayStats, openSnapshot } from './cmms.js';
+import { compactDash } from './analysis.js';
 
 // Fold one CMMS upload into today's performance document (same rules as the server's saveBacklog).
 const statsAfterUpload = (prevRows, rows, old, fileName, at) => {
   const t = today0();
   const day = iso(t);
-  return foldDayStats(old, { day, events: dayEvents(prevRows, rows, day), snapshot: openSnapshot(rows, t), at, fileName });
+  return foldDayStats(old, { day, events: dayEvents(prevRows, rows, day), snapshot: openSnapshot(rows, t), at, fileName, dash: compactDash(rows, t) });
 };
 
 /*
@@ -301,7 +302,7 @@ function useLocalStore() {
       const doc = { uploadedAt: new Date().toISOString(), fileName, rows };
       // A baseline restarts the report from this file; otherwise fold the upload into today's stats.
       const nextStats = baseline
-        ? [baselineStats(rows, baseline, doc.uploadedAt, fileName)]
+        ? [baselineStats(rows, baseline, doc.uploadedAt, fileName, compactDash(rows, pd(baseline)))]
         : (() => {
           const day = statsAfterUpload(backlog?.rows, rows, stats.find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
           return stats.filter((x) => x.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date)).slice(-120);
@@ -507,7 +508,7 @@ function useSharedStore() {
       if (JSON.stringify(doc).length > 250000) throw new StoreError('quota_exceeded');
       if (baseline) {
         for (const old of partsRef.current.stats || []) await call(() => db.doc(`stats/${old.date}`).delete());
-        await call(() => db.doc(`stats/${baseline}`).set(baselineStats(rows, baseline, doc.uploadedAt, fileName)));
+        await call(() => db.doc(`stats/${baseline}`).set(baselineStats(rows, baseline, doc.uploadedAt, fileName, compactDash(rows, pd(baseline)))));
       } else {
         const day = statsAfterUpload(partsRef.current.backlog?.rows, rows, (partsRef.current.stats || []).find((x) => x.date === iso(today0())), fileName, doc.uploadedAt);
         await call(() => db.doc(`stats/${day.date}`).set(day));

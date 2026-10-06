@@ -2,7 +2,8 @@
 // Postgres holds one table of JSON documents keyed by (collection, id): jobs, photos (kept apart
 // from jobs), plants, history (one row per day) and meta. `conn` supplies query() and tx(fn).
 import { MAX_JOBS_PER_PLANT, PLANT_IDS, SEED, counts } from '../src/lib/data.js';
-import { iso } from '../src/lib/dates.js';
+import { iso, pd } from '../src/lib/dates.js';
+import { compactDash } from '../src/lib/analysis.js';
 import { TRACKED_WL, baselineStats, dayEvents, foldDayStats, isTrackedRow, latestSeen, openSnapshot, presentIn, teamOf } from '../src/lib/cmms.js';
 
 const ID_RE = /^[\w\-.~:@+]{1,100}$/;
@@ -372,7 +373,7 @@ export function createDb(conn) {
         return tx(async (c) => {
           const hist = await syncHist(c, rows, iso(bangkokToday()), fileDate);
           await c.query("DELETE FROM docs WHERE collection = 'stats'");
-          await put(c, 'stats', base, baselineStats(rows, base, doc.uploadedAt, doc.fileName));
+          await put(c, 'stats', base, baselineStats(rows, base, doc.uploadedAt, doc.fileName, compactDash(rows, pd(base))));
           await put(c, 'backlog', 'current', doc);
           await stamp(c, by);
           return { hist };
@@ -384,7 +385,7 @@ export function createDb(conn) {
         const t = bangkokToday();
         const day = iso(t);
         const old = (await c.query("SELECT data FROM docs WHERE collection = 'stats' AND id = $1", [day])).rows[0]?.data;
-        const stats = foldDayStats(old, { day, events: dayEvents(prev?.rows, rows, day), snapshot: openSnapshot(rows, t), at: doc.uploadedAt, fileName: doc.fileName });
+        const stats = foldDayStats(old, { day, events: dayEvents(prev?.rows, rows, day), snapshot: openSnapshot(rows, t), at: doc.uploadedAt, fileName: doc.fileName, dash: compactDash(rows, t) });
         await put(c, 'stats', day, stats);
         const hist = await syncHist(c, rows, day, fileDate);
         await put(c, 'backlog', 'current', doc);

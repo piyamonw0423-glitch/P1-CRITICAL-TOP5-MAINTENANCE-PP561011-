@@ -304,7 +304,7 @@ export function openSnapshot(rows, today) {
 const EVENT_KEYS = ['opened', 'new', 'started', 'finished', 'closed', 'assumed'];
 const noEvents = () => Object.fromEntries(EVENT_KEYS.map((k) => [k, []]));
 
-export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseline = false }) {
+export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseline = false, dash = null }) {
   const out = { date: day, rounds: [...(prev?.rounds || []), { at, fileName: String(fileName || '').slice(0, 120), ...(baseline ? { baseline: true } : {}) }].slice(-12) };
   if (baseline || prev?.baseline) out.baseline = true;
   const back = new Set(events.back || []);
@@ -321,6 +321,7 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
   const fresh = new Set((out.new || []).map((t) => normWo(t[0])));
   out.opened = (out.opened || []).map((t) => (fresh.has(normWo(t[0])) && t[4] !== 1 ? [t[0], t[1], t[2], t[3], 1, t[5]] : t));
   out.open = snapshot;
+  if (dash || prev?.dash) out.dash = dash || prev.dash; // compact backlog summary of the day's latest upload (analysis.js)
   return out;
 }
 
@@ -378,9 +379,9 @@ export function statTotals(doc, ids, team = null, wlOf = null) {
  * Starting point for the performance report: the open snapshot of `rows` on `day`, with no events.
  * Used when a file is uploaded as the baseline (all older stats are discarded).
  */
-export const baselineStats = (rows, day, at, fileName) => {
+export const baselineStats = (rows, day, at, fileName, dash = null) => {
   const [y, m, d] = day.split('-').map(Number);
-  return foldDayStats(null, { day, events: noEvents(), snapshot: openSnapshot(rows, new Date(y, m - 1, d)), at, fileName, baseline: true });
+  return foldDayStats(null, { day, events: noEvents(), snapshot: openSnapshot(rows, new Date(y, m - 1, d)), at, fileName, baseline: true, dash });
 };
 
 /** "List WO Backlog P1_1.10.26.xlsx" → "2026-10-01" (day.month.year in the file name), else null. */
