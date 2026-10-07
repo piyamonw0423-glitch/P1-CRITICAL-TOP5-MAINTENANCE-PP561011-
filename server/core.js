@@ -250,6 +250,11 @@ export function createDb(conn) {
       return { updatedAt: r.rows[0]?.data.updatedAt || null };
     },
 
+    /** Top 5 jobs only (no photos) — for the LINE message. */
+    async jobs() {
+      return (await conn.query("SELECT id, data FROM docs WHERE collection = 'jobs'")).rows.map((r) => ({ ...r.data, id: r.id }));
+    },
+
     async state() {
       // Photos are listed by link only (served by photo()), keeping this response small.
       const rows = (await conn.query(`SELECT collection, id,

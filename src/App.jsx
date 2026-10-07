@@ -415,7 +415,7 @@ export default function App() {
 
               <HistoryReport wohist={store.wohist} ids={view.ids} today={t} plantLabel={view.filter.label} edit={editMode} onImport={() => document.getElementById('hist-file')?.click()} />
 
-              <DailyReport stats={store.stats} backlog={backlog} ids={view.ids} today={t} plantLabel={view.filter.label} />
+              <DailyReport stats={store.stats} backlog={backlog} ids={view.ids} today={t} plantLabel={view.filter.label} jobs={data.jobs} />
 
               <BacklogPanel
                 backlog={backlog}

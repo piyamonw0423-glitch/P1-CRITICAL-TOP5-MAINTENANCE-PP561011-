@@ -54,9 +54,9 @@ const hm = (iso) => { const { h, m } = thaiParts(Date.parse(iso)); return `${Str
 const thaiDate = (day) => { const d = pd(day); return `${d.getDate()} ${TH_M[d.getMonth()]} ${d.getFullYear() + 543}`; };
 
 /** Daily summary of the latest upload vs the previous report day (reported once a day, ~16:30). */
-export const summaryText = ({ days, backlog, url }) => {
+export const summaryText = ({ days, backlog, url, jobs = null }) => {
   const today = new Date(Date.now() + 7 * 3600e3);
-  return reportText({ cur: days.at(-1), prev: days.length > 1 ? days.at(-2) : null, backlog, url, today: new Date(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) });
+  return reportText({ cur: days.at(-1), prev: days.length > 1 ? days.at(-2) : null, backlog, url, jobs, today: new Date(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) });
 };
 
 const HELP = 'พิมพ์ "สรุป" เพื่อดูรายงาน WO P1 ล่าสุด · พิมพ์ "id" เพื่อดูรหัสผู้ใช้ LINE ของคุณ (ใช้ตั้งค่า LINE_TO)';
@@ -67,7 +67,7 @@ export async function handleWebhook(env, db, body, url) {
     if (ev.type !== 'message' || ev.message?.type !== 'text' || !ev.replyToken) continue;
     const text = String(ev.message.text || '').trim();
     let reply = HELP;
-    if (/^(สรุป|รายงาน|summary|report)$/i.test(text)) reply = summaryText({ days: await db.stats(2), backlog: await db.backlog(), url });
+    if (/^(สรุป|รายงาน|summary|report)$/i.test(text)) reply = summaryText({ days: await db.stats(2), backlog: await db.backlog(), jobs: await db.jobs(), url });
     else if (/^(id|ไอดี)$/i.test(text)) reply = `รหัสผู้ใช้ LINE ของคุณ: ${ev.source?.userId || '(ไม่พบ)'}`;
     await lineReply(env, ev.replyToken, reply);
   }

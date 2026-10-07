@@ -1,7 +1,7 @@
 // Analysed daily update for LINE: what changed since the previous report day (open backlog, status groups,
 // teams, per plant), what opened / closed today, and what still needs pushing (aging, oldest WOs, approvers).
 // Every upload stores a compact summary in the day's stats doc (`dash`) so the next day can be compared with it.
-import { PLANT_IDS } from './data.js';
+import { BLOCK, PLANT_IDS, TOP_N, bucket, listOf } from './data.js';
 import { TH_M, pd } from './dates.js';
 import { STATUS_GROUPS, TEAMS, groupOf, insertedWos, normWo, statTotals, withEntered } from './cmms.js';
 import { backlogDashboard } from './backlogDash.js';
@@ -40,7 +40,7 @@ const firstName = (s) => String(s || '').trim().split(/\s+/)[0] || s;
  * @param backlog    backlog doc — descriptions, and today's summary when cur.dash is missing (older docs)
  * @param today      Date (Thai day) used only for that fallback
  */
-export function analysisText({ cur, prev = null, backlog = null, url = '', today = new Date(), latest = true }) {
+export function analysisText({ cur, prev = null, backlog = null, url = '', today = new Date(), latest = true, jobs = null }) {
   if (!cur) return `ยังไม่มีรายงาน — อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
   cur = withEntered(cur, backlog, latest); // "entered" of the latest day comes from the WO list itself
   const ids = PLANT_IDS;
@@ -127,6 +127,9 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     lines.push(`🏭 PP${id}: เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${delta != null ? ` (${sign(delta)})` : ''}`);
   }
   lines.push('');
+
+  // 3b) Top 5 machine-risk (BD) jobs the team tracks, per plant
+  if (jobs) lines.push(...top5Lines(jobs, today), '');
 
   // 4) What still needs pushing (rules on the stored summaries) and what the team should do about it
   if (now) {
@@ -260,4 +263,31 @@ export function eveningText({ cur, backlog = null, url = '', today = new Date() 
 /** The LINE message for the latest upload: the daily summary vs the previous report day (once a day, ~16:30). */
 export function reportText(args) {
   return analysisText(args);
+}
+
+
+const shortDay = (iso) => { if (!iso) return ''; const d = pd(iso); return `${d.getDate()} ${TH_M[d.getMonth()]}`; };
+
+/**
+ * "🛠 Top 5 ความเสี่ยงเครื่องจักร (BD)": per plant, the first TOP_N open jobs of the BD list by rank —
+ * WO, problem, progress, due date (⏰ when overdue) and the blocker. Done jobs are left out.
+ */
+export function top5Lines(jobs, today = new Date()) {
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const out = ['🛠 Top 5 ความเสี่ยงเครื่องจักร (BD)'];
+  let any = false;
+  for (const id of PLANT_IDS) {
+    const list = (jobs || []).filter((j) => Number(j.plant) === id && listOf(j) === 'risk' && j.status !== 'done')
+      .sort((a, b) => (a.rank || 99) - (b.rank || 99)).slice(0, TOP_N);
+    if (!list.length) { out.push(`PP${id}: — ไม่มีงานค้างในรายการ`); continue; }
+    any = true;
+    out.push(`PP${id}:`);
+    list.forEach((j, i) => {
+      const late = bucket(j, t) === 'stuck' && j.status !== 'pending';
+      const blk = j.blocker && j.blocker !== 'none' ? ` · ⛔ ${BLOCK[j.blocker]?.label || j.blocker}` : '';
+      out.push(`${i + 1}) ${j.wo ? `${j.wo} ` : ''}${String(j.issue || '').slice(0, 50)} · ${Number(j.progress) || 0}%${j.end ? ` · กำหนด ${shortDay(j.end)}${late ? ' ⏰เกินกำหนด' : ''}` : ''}${blk}`);
+    });
+  }
+  if (!any) return ['🛠 Top 5 ความเสี่ยงเครื่องจักร (BD): ยังไม่มีงานในรายการ'];
+  return out;
 }

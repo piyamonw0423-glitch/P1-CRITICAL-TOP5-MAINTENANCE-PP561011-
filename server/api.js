@@ -84,7 +84,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
       if (method === 'POST' && path === '/api/line/test') {
         if (!lineConfigured(env)) return fail(400, 'line_not_configured');
         try {
-          await linePush(env, `✅ ทดสอบการแจ้งเตือนจาก TOP5 Maintenance Dashboard\n\n${summaryText({ days: await db.stats(2), backlog: await db.backlog(), url })}`);
+          await linePush(env, `✅ ทดสอบการแจ้งเตือนจาก TOP5 Maintenance Dashboard\n\n${summaryText({ days: await db.stats(2), backlog: await db.backlog(), jobs: await db.jobs(), url })}`);
           return ok();
         } catch (e) {
           return fail(502, `line_failed:${e.lineStatus ?? ''}`);
@@ -96,7 +96,7 @@ export async function handleApi(db, { method, path, body, perm, env = {}, rawBod
         let line = 'off';
         if (lineConfigured(env) && !body?.baseline) {
           try {
-            await linePush(env, summaryText({ days: await db.stats(2), backlog: await db.backlog(), url }));
+            await linePush(env, summaryText({ days: await db.stats(2), backlog: await db.backlog(), jobs: await db.jobs(), url }));
             line = 'sent';
           } catch (e) {
             console.error('line push', e);

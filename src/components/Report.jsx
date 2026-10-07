@@ -170,7 +170,7 @@ export function OpenChart({ days, W = 560, name = 'คงค้าง' }) {
   );
 }
 
-export default function DailyReport({ stats, backlog, ids, today, plantLabel }) {
+export default function DailyReport({ stats, backlog, ids, today, plantLabel, jobs = null }) {
   const days = stats || [];
   const [date, setDate] = useState(null);
   const [team, setTeam] = useState([]); // selected WO_Worklocation codes, [] = all
@@ -270,7 +270,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
   };
   // Same analysed message the LINE push sends (all plants), for pasting into a group chat.
   const link = `${location.origin}${location.pathname}`;
-  const roundText = () => analysisText({ cur: picked, prev, backlog, today, latest: picked === days.at(-1), url: link });
+  const roundText = () => analysisText({ cur: picked, prev, backlog, today, latest: picked === days.at(-1), jobs, url: link });
   const eveText = () => eveningText({ cur: picked, backlog, today, url: link });
   const canEvening = (picked?.rounds?.length || 0) >= 2;
   const copy = async (which) => {
