@@ -351,8 +351,9 @@ export function insertedWos(doc) {
   const out = new Set();
   if (!doc) return out;
   const fresh = new Set((doc.new || []).map((t) => normWo(t[0])));
-  // Since 7 Oct 2026: new WO that day AND Actual Start time after 09:30, up to 17:00 (opened flag = in window).
-  if (doc.insWin && doc.opened) for (const t of doc.opened) { if (t[4] === 1 && fresh.has(normWo(t[0]))) out.add(normWo(t[0])); }
+  // Since 7 Oct 2026 (team rule): every WO whose Actual Start is that day after 09:30, up to 17:00 — new in the file
+  // or not, so the report shows all work the team slotted in during the day (opened flag = in window).
+  if (doc.insWin && doc.opened) for (const t of doc.opened) { if (t[4] === 1) out.add(normWo(t[0])); }
   else if (doc.opened) for (const t of doc.opened) { if (fresh.has(normWo(t[0])) || t[4] === 1) out.add(normWo(t[0])); }
   else for (const t of doc.new || []) if (t[4] === 1) out.add(normWo(t[0]));
   return out;
