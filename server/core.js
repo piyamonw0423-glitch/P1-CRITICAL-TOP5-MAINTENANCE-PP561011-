@@ -45,6 +45,7 @@ function cleanBacklog(rows) {
     const out = { wo, plant, value: Math.max(0, Number(r.value) || 0) };
     for (const [f, max] of Object.entries(BACKLOG_TEXT)) out[f] = String(r[f] ?? '').slice(0, max);
     for (const f of BACKLOG_DATES) out[f] = DATE_RE.test(r[f]) ? r[f] : null;
+    out.actualStartTime = /^\d{2}:\d{2}$/.test(r.actualStartTime) ? r.actualStartTime : null;
     out.team = teamOf(out.workLoc); // derived here, never trusted from the browser
     for (const f of ['seenAt', 'changedAt']) out[f] = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(r[f]) ? r[f] : null;
     return out;

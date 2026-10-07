@@ -254,7 +254,7 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
       ...rounds.filter((r) => !r.baseline).map((r) => `  รอบ ${hm(r.at)} น.: เปิด ${r.opened}${r.inserted ? ` (แทรก ${r.inserted})` : ''} · เริ่ม ${r.started} · เสร็จรอปิด ${r.finished} · CLOSED ${r.closed}`),
       `คงค้าง ${tot.open} WO${openDelta != null ? ` (${signed(openDelta)} จาก ${dayLabel(prev.date)})` : ''} · ค้างเกิน 30 วัน ${tot.a90 + tot.aMore}`,
       ...(tm ? [] : byTeam.filter((t) => t.open || t.closed || t.started).map((t) => `• ${t.label} (${t.team}): ค้าง ${t.open} (เกิน 30 วัน ${t.a90 + t.aMore}) · เริ่ม ${t.started} · ปิด ${t.closed}`)),
-      ...(opened.length ? ['', `เปิดงานวันนี้ (Actual Start) ${opened.length} (⚡ = WO ใหม่ในไฟล์ = แทรกระหว่างวัน):`,
+      ...(opened.length ? ['', `เปิดงานวันนี้ (Actual Start) ${opened.length} (⚡ แทรกระหว่างวัน = WO ใหม่ที่เริ่มหลัง 09:30–17:00):`,
         ...opened.slice(0, 15).map((f) => `${f.mid ? '⚡' : '•'} ${f.wo} PP${f.plant} ${f.team} ${f.row?.status || ''} – ${String(f.row?.desc || '').slice(0, 45)}`)] : []),
       ...(closedByStatus.length ? ['', `CLOSED (Status ใน CMMS) ${closedByStatus.length}:`,
         ...closedByStatus.slice(0, 15).map((c) => `✓ ${c.wo} PP${c.plant} ${c.team} – ${String(c.row?.desc || '').slice(0, 45)}`)] : []),
@@ -374,13 +374,13 @@ export default function DailyReport({ stats, backlog, ids, today, plantLabel }) 
           )}
           <FoldList key={`s${cur.date}`} title="เปิดงานวันนี้ (Actual Start)" items={opened}
             note={opened.some((f) => f.mid)
-              ? `⚡ แทรกระหว่างวัน ${opened.filter((f) => f.mid).length} WO = WO ใหม่ในไฟล์ที่ Actual Start วันนี้ · ที่เหลือ (ป้าย "เปิด") เป็น WO เดิมที่เริ่มงานวันนี้`
-              : 'ไม่มีงานแทรกระหว่างวัน — ทุกรายการ (ป้าย "เปิด") เป็น WO เดิมที่มีอยู่ในไฟล์ก่อนแล้ว และเริ่มงาน (Actual Start) วันนี้'} tone="rep-new" startOpen
+              ? `⚡ แทรกระหว่างวัน ${opened.filter((f) => f.mid).length} WO = WO ใหม่ที่ Actual Start วันนี้หลัง 09:30 ถึง 17:00 · ที่เหลือ (ป้าย "เปิด") เป็นงานตามแผน (เริ่ม 08:00–09:30) หรือ WO เดิม`
+              : 'ไม่มีงานแทรกระหว่างวัน — งานแทรก = WO ใหม่ที่ Actual Start วันนี้หลัง 09:30 ถึง 17:00 (เริ่ม 08:00–09:30 = งานตามแผนของหัวหน้างาน)'} tone="rep-new" startOpen
             render={(f) => (
               <li key={f.wo} className={f.mid ? 'is-insert' : ''} title={f.row?.desc || ''}>
                 <span className="rep-age">{f.mid ? '⚡ แทรก' : 'เปิด'}</span>
                 <span className="rep-wo">{f.wo}</span>
-                <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'}</span>
+                <span className="muted">PP{f.plant} · {f.team} · {f.row?.status || '-'}{f.row?.actualStartTime ? ` · เริ่ม ${f.row.actualStartTime}` : ''}</span>
                 <span className="rep-desc">{f.row?.desc || ''}</span>
               </li>
             )} />

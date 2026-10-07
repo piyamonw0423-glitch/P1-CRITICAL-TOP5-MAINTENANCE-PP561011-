@@ -35,6 +35,18 @@ const thaiDay = (v) => {
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : iso(d);
 };
+/** "HH:MM" wall-clock time of a CMMS Date cell (same UTC-field convention as thaiDay), else null. */
+const thaiTime = (v) => (v instanceof Date && !Number.isNaN(v.getTime())
+  ? `${String(v.getUTCHours()).padStart(2, '0')}:${String(v.getUTCMinutes()).padStart(2, '0')}` : null);
+
+/**
+ * "Inserted during the day" window (team rule, 7 Oct 2026): supervisors plan the day's entries 08:00–09:30, so
+ * only work whose Actual Start time is after 09:30 and up to 17:00 (day shift) counts as inserted.
+ */
+export const INSERT_FROM = '09:30';
+export const INSERT_TO = '17:00';
+export const inInsertWindow = (hhmm) => !!hhmm && hhmm > INSERT_FROM && hhmm <= INSERT_TO;
+
 const str = (v, max = 300) => (v == null ? '' : String(v).trim().slice(0, max));
 
 // Export column → stored field. Only what the dashboard shows is kept.
@@ -117,6 +129,7 @@ export async function parseBacklogWorkbook(file) {
       row.team = teamOf(row.workLoc);
       if (!isTrackedRow(row)) { const k = normWl(row.workLoc) || '(ไม่มี WL)'; skippedWl[k] = (skippedWl[k] || 0) + 1; continue; }
       for (const f of DATE_FIELDS) row[f] = thaiDay(get(f));
+      row.actualStartTime = thaiTime(get('actualStart'));
       row.value = Number(get('value')) || 0;
       rows.push(row);
     }
@@ -268,9 +281,10 @@ export function dayEvents(prevRows, nextRows, day) {
     // Entered the backlog = open now, and not open in the previous file (new WO number, or back from finished).
     if (hasPrev && !isClosedGroup(g) && (!prev || isClosedGroup(pg) || !presentIn(prev, prevLatest))) ev.entered.push(tuple(r));
     // Opened on the day = Actual Start is that day (team rule, same as the history report); 5th field = new in the file.
-    if (r.actualStart === day) ev.opened.push([...tuple(r), !prev && hasPrev ? 1 : 0]);
+    // 5th field = Actual Start time inside the inserted window (after 09:30, up to 17:00).
+    if (r.actualStart === day) ev.opened.push([...tuple(r), inInsertWindow(r.actualStartTime) ? 1 : 0]);
     // New in the file; the 5th field marks "inserted during the day" = its Actual Start is the upload day itself.
-    if (!prev && hasPrev) ev.new.push([...tuple(r), r.actualStart === day ? 1 : 0]);
+    if (!prev && hasPrev) ev.new.push([...tuple(r), r.actualStart === day && inInsertWindow(r.actualStartTime) ? 1 : 0]);
     const moved = prev && prev.status !== r.status;
     if ((moved && !DOING_OR_DONE.has(pg) && WORKING.has(g)) || (r.actualStart === day && prev?.actualStart !== day)) ev.started.push(tuple(r));
     if ((moved && g === 'finish' && !isClosedGroup(pg)) || (r.actualFinish === day && prev?.actualFinish !== day && !isClosedGroup(pg))) ev.finished.push(tuple(r));
@@ -320,8 +334,7 @@ export function foldDayStats(prev, { day, events, snapshot, at, fileName, baseli
       .filter((t) => !((k === 'assumed' || k === 'closed') && back.has(normWo(t[0]))) || (events[k] || []).some((e) => normWo(e[0]) === normWo(t[0])))
       .slice(0, 2000);
   }
-  const fresh = new Set((out.new || []).map((t) => normWo(t[0])));
-  out.opened = (out.opened || []).map((t) => (fresh.has(normWo(t[0])) && t[4] !== 1 ? [t[0], t[1], t[2], t[3], 1, t[5]] : t));
+  out.insWin = true; // opened flags mean "Actual Start time in the inserted window" (see insertedWos)
   out.open = snapshot;
   if (dash || prev?.dash) out.dash = dash || prev.dash; // compact backlog summary of the day's latest upload (analysis.js)
   const first = prev ? prev.dashFirst || prev.dash : dash; // ... and of its first (morning) upload, for the evening report
@@ -338,7 +351,9 @@ export function insertedWos(doc) {
   const out = new Set();
   if (!doc) return out;
   const fresh = new Set((doc.new || []).map((t) => normWo(t[0])));
-  if (doc.opened) for (const t of doc.opened) { if (fresh.has(normWo(t[0])) || t[4] === 1) out.add(normWo(t[0])); }
+  // Since 7 Oct 2026: new WO that day AND Actual Start time after 09:30, up to 17:00 (opened flag = in window).
+  if (doc.insWin && doc.opened) for (const t of doc.opened) { if (t[4] === 1 && fresh.has(normWo(t[0]))) out.add(normWo(t[0])); }
+  else if (doc.opened) for (const t of doc.opened) { if (fresh.has(normWo(t[0])) || t[4] === 1) out.add(normWo(t[0])); }
   else for (const t of doc.new || []) if (t[4] === 1) out.add(normWo(t[0]));
   return out;
 }

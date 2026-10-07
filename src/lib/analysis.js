@@ -109,8 +109,11 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   const ins = insertedWos(cur);
   const opened = (cur.opened || cur.new || []).filter(inScope)
     .sort((a, b) => ins.has(normWo(b[0])) - ins.has(normWo(a[0])));
-  lines.push(`▶️ เปิดงานจริงวันนี้ (Actual Start) ${t.opened} WO${t.inserted ? ` (⚡แทรก ${t.inserted})` : ''}`);
-  for (const x of opened.slice(0, LIST_MAX)) lines.push(woLine(ins.has(normWo(x[0])) ? '⚡' : '•', x));
+  lines.push(`▶️ เปิดงานจริงวันนี้ (Actual Start) ${t.opened} WO${t.inserted ? ` (⚡แทรกระหว่างวัน ${t.inserted} = เริ่มหลัง 09:30–17:00)` : ''}`);
+  for (const x of opened.slice(0, LIST_MAX)) {
+    const tm = rowOf(x[0])?.actualStartTime;
+    lines.push(woLine(ins.has(normWo(x[0])) ? '⚡' : '•', x).replace(' – ', `${tm ? ` เริ่ม ${tm}` : ''} – `));
+  }
   lines.push(...more(opened));
   if (!opened.length) lines.push('• ไม่มีงานที่ Actual Start เป็นวันนี้');
   lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิดวันนี้ ${t.finished} WO`);
