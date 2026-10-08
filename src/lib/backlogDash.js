@@ -48,10 +48,10 @@ export function backlogDashboard(rows, ids, today) {
     const name = String(r.nextApprove || '').trim() || '(ไม่ระบุ)';
     (byApprover.get(name) || byApprover.set(name, []).get(name)).push(r);
   }
-  const approvers = [...byApprover.entries()]
+  const approversAll = [...byApprover.entries()]
     .map(([name, list]) => ({ name, ...summary(list), over365: list.filter((r) => r.age > 365).length, over180: list.filter((r) => r.age > 180).length }))
-    .sort((a, b) => b.count - a.count || b.avgAge - a.avgAge)
-    .slice(0, 10);
+    .sort((a, b) => b.count - a.count || b.avgAge - a.avgAge);
+  const approvers = approversAll.slice(0, 10);
 
   return {
     total,
@@ -65,7 +65,8 @@ export function backlogDashboard(rows, ids, today) {
       value: valued.reduce((s, r) => s + Number(r.value), 0),
       valueCount: valued.length,
     },
-    groups, teams, bands, plants, matrix, plantMatrix, approvers,
+    groups, teams, bands, plants, matrix, plantMatrix, approvers, approversAll,
+    over365Wos: open.filter((r) => r.age > 365).sort((a, b) => b.age - a.age).map((r) => String(r.wo)),
     oldest: [...open].sort((a, b) => b.age - a.age).slice(0, 10),
   };
 }

@@ -26,7 +26,9 @@ export function compactDash(rows, today) {
     teams: Object.fromEntries(d.teams.map((t) => [t.k, [t.count, t.over180]])),
     plants: Object.fromEntries(d.plants.map((p) => [p.plant, p.count])),
     oldest: d.oldest.map((r) => [String(r.wo), r.age, r.g]),
-    appr365: d.approvers.filter((a) => a.over365).sort((a, b) => b.over365 - a.over365).slice(0, 3).map((a) => [a.name, a.over365]),
+    // every approver, not only the 10 with the most WOs (8 Oct 2026)
+    appr365: d.approversAll.filter((a) => a.over365).sort((a, b) => b.over365 - a.over365).slice(0, 3).map((a) => [a.name, a.over365]),
+    o365: d.over365Wos, // WO numbers > 365 days, to tell closed ones from newly crossed ones the next day
   };
 }
 
@@ -124,7 +126,17 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   if (now) {
     const warn = [];
     const d365 = was ? now.over365 - was.over365 : null;
-    if (now.over365) warn.push(`• งานค้างเกิน 1 ปี ${d365 == null ? `มี ${now.over365} WO` : d365 === 0 ? `ยังมี ${now.over365} WO เท่าเดิม` : `${now.over365} WO (${sign(d365)})`}`);
+    if (now.o365 && was?.o365) {
+      // Compare WO by WO: age only grows, so a WO leaving the list was closed (or left the file).
+      const nowSet = new Set(now.o365), wasSet = new Set(was.o365);
+      const out = was.o365.filter((w) => !nowSet.has(w)), crossed = now.o365.filter((w) => !wasSet.has(w));
+      const few = (l) => (l.length && l.length <= 5 ? `: ${l.join(', ')}` : '');
+      if (now.over365 || out.length) {
+        warn.push(`• งานค้างเกิน 1 ปี ${now.over365} WO (${sign(d365)})${!out.length && !crossed.length ? ' — ยังไม่มีการปิด' : ''}`);
+        if (out.length) warn.push(`  ✅ ปิด/ออกจากรายการ ${out.length} WO${few(out)}`);
+        if (crossed.length) warn.push(`  ⏳ เพิ่งครบ 1 ปี ${crossed.length} WO${few(crossed)}`);
+      }
+    } else if (now.over365) warn.push(`• งานค้างเกิน 1 ปี ${d365 == null ? `มี ${now.over365} WO` : d365 === 0 ? `ยังมี ${now.over365} WO เท่าเดิม` : `${now.over365} WO (${sign(d365)})`}`);
     if (now.oldest.length) {
       const maxAge = now.oldest[0][1];
       const allPlan = now.oldest.every((o) => o[2] === 'plan');
