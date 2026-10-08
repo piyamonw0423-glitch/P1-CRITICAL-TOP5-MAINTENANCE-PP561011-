@@ -60,7 +60,7 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   const openWas = was ? was.open : p ? p.open : null;
   if (openWas != null) {
     const dv = openNow - openWas;
-    lines.push(dv < 0 ? `✅ งานค้างลดลง ${-dv} WO (${openWas} → ${openNow})` : dv > 0 ? `⚠️ งานค้างเพิ่มขึ้น ${dv} WO (${openWas} → ${openNow})` : `➖ งานค้างเท่าเดิม ${openNow} WO`);
+    lines.push(dv < 0 ? `✅ งานค้างลดลง ${-dv} WO (${openWas} -> ${openNow})` : dv > 0 ? `⚠️ งานค้างเพิ่มขึ้น ${dv} WO (${openWas} -> ${openNow})` : `➖ งานค้างเท่าเดิม ${openNow} WO`);
   } else lines.push(`📌 งานค้าง ${openNow} WO`);
   if (now && was) {
     const moved = Object.keys({ ...now.groups, ...was.groups })
@@ -68,7 +68,7 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
       .filter(([, a, b]) => a !== b)
       .sort((x, y) => Math.abs(y[1] - y[2]) - Math.abs(x[1] - x[2]))
       .slice(0, 3);
-    for (const [k, a, b] of moved) lines.push(`• ${GROUP[k]?.label || k} ${b} → ${a} (${sign(a - b)})`);
+    for (const [k, a, b] of moved) lines.push(`• ${GROUP[k]?.label || k} ${b} -> ${a} (${sign(a - b)})`);
   }
   // Team change: from the stored summary, else from the open snapshot (plant|team keys).
   const teamOpen = (doc, k) => { const d = doc === prev ? was : doc?.dash; return d ? d.teams[k]?.[0] || 0 : statTotals(doc, ids, k).open; };
@@ -86,10 +86,10 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     const f1 = (n) => n.toFixed(1);
     const pct = (d) => (d.open ? (d.over180 / d.open) * 100 : 0);
     const money = (n) => Math.round(n).toLocaleString('en-US');
-    lines.push('', `📊 ภาพรวม ${thaiShort(prev.date)} → ${thaiShort(cur.date)}`,
-      `• อายุค้างเฉลี่ย ${f1(was.avg1)} → ${f1(now.avg1)} วัน (${now.avg1 - was.avg1 >= 0 ? '+' : ''}${f1(now.avg1 - was.avg1)}) · สูงสุด ${was.max} → ${now.max} วัน`,
-      `• ค้าง > 365 วัน ${was.over365} → ${now.over365} (${sign(now.over365 - was.over365)}) · > 180 วัน ${was.over180} → ${now.over180} (${sign(now.over180 - was.over180)}) = ${f1(pct(now))}%`,
-      `• มูลค่างานประเมิน ${money(was.value)} → ${money(now.value)} บาท (${now.value - was.value >= 0 ? '+' : ''}${money(now.value - was.value)}) · ${was.valued} → ${now.valued} WO`);
+    lines.push('', `📊 ภาพรวม ${thaiShort(prev.date)} -> ${thaiShort(cur.date)}`,
+      `• อายุค้างเฉลี่ย ${f1(was.avg1)} -> ${f1(now.avg1)} วัน (${now.avg1 - was.avg1 >= 0 ? '+' : ''}${f1(now.avg1 - was.avg1)}) · สูงสุด ${was.max} -> ${now.max} วัน`,
+      `• ค้าง > 365 วัน ${was.over365} -> ${now.over365} (${sign(now.over365 - was.over365)}) · > 180 วัน ${was.over180} -> ${now.over180} (${sign(now.over180 - was.over180)}) = ${f1(pct(now))}%`,
+      `• มูลค่างานประเมิน ${money(was.value)} -> ${money(now.value)} บาท (${now.value - was.value >= 0 ? '+' : ''}${money(now.value - was.value)}) · ${was.valued} -> ${now.valued} WO`);
   }
   lines.push('');
 
@@ -210,11 +210,11 @@ export function eveningText({ cur, backlog = null, url = '', today = new Date() 
   lines.push(`✅ วันนี้ปิดงานได้ ${closed.length} WO${closed.length ? ` (Status CLOSED ${byStatus} + ไม่พบในไฟล์ ${assumedSet.size})` : ''} · เสร็จรอปิดเพิ่ม ${finished.length} WO`);
   if (morning && evening) {
     const dv = evening.open - morning.open;
-    lines.push(`${dv < 0 ? '📉' : dv > 0 ? '📈' : '➖'} งานค้าง เช้า ${morning.open} → เย็น ${evening.open} (${sign(dv)})`);
+    lines.push(`${dv < 0 ? '📉' : dv > 0 ? '📈' : '➖'} งานค้าง เช้า ${morning.open} -> เย็น ${evening.open} (${sign(dv)})`);
     const moved = Object.keys({ ...evening.groups, ...morning.groups })
       .map((k) => [k, evening.groups[k]?.[0] || 0, morning.groups[k]?.[0] || 0]).filter(([, a, b]) => a !== b)
       .sort((x, y) => Math.abs(y[1] - y[2]) - Math.abs(x[1] - x[2])).slice(0, 3);
-    for (const [k, a, b] of moved) lines.push(`• ${GROUP[k]?.label || k} ${b} → ${a} (${sign(a - b)})`);
+    for (const [k, a, b] of moved) lines.push(`• ${GROUP[k]?.label || k} ${b} -> ${a} (${sign(a - b)})`);
     const deltas = TEAM_KEYS.map((k) => [k, (evening.teams[k]?.[0] || 0) - (morning.teams[k]?.[0] || 0)]);
     const changed = deltas.filter(([, d]) => d).sort((a, b) => a[1] - b[1]).map(([k, d]) => `${k} ${sign(d)}`);
     const same = deltas.filter(([, d]) => !d).map(([k]) => k);
@@ -251,7 +251,7 @@ export function eveningText({ cur, backlog = null, url = '', today = new Date() 
     const mine = (list) => list.filter((x) => Number(x[1]) === id).length;
     const openNow = statTotals(cur, [id]).open;
     const openAm = morning?.plants?.[id];
-    lines.push(`🏭 PP${id}: ปิด ${mine(closed)} · เสร็จรอปิด ${mine(finished)} · เข้าใหม่ ${mine(entered)} · คงค้าง ${openAm != null ? `${openAm} → ${openNow} (${sign(openNow - openAm)})` : openNow}`);
+    lines.push(`🏭 PP${id}: ปิด ${mine(closed)} · เสร็จรอปิด ${mine(finished)} · เข้าใหม่ ${mine(entered)} · คงค้าง ${openAm != null ? `${openAm} -> ${openNow} (${sign(openNow - openAm)})` : openNow}`);
   }
   lines.push('');
   const left = closed.length + finished.length;
@@ -286,7 +286,9 @@ export function top5Lines(jobs, today = new Date()) {
     list.forEach((j, i) => {
       const late = bucket(j, t) === 'stuck' && j.status !== 'pending';
       const blk = j.blocker && j.blocker !== 'none' ? ` · ⛔ ${BLOCK[j.blocker]?.label || j.blocker}` : '';
-      out.push(`${i + 1}) ${j.wo ? `${j.wo} ` : ''}${String(j.issue || '').slice(0, 50)} · ${Number(j.progress) || 0}%${j.end ? ` · กำหนด ${shortDay(j.end)}${late ? ' ⏰เกินกำหนด' : ''}` : ''}${blk}`);
+      // ▶️ = in progress ("กำลังทำ"), followed by the team's note when there is one
+      const doing = j.status === 'doing' ? ` ▶️${j.note ? ` ${String(j.note).trim().slice(0, 60)}` : ''}` : '';
+      out.push(`${i + 1}) ${j.wo ? `${j.wo} ` : ''}${String(j.issue || '').slice(0, 50)} · ${Number(j.progress) || 0}%${j.end ? ` · กำหนด ${shortDay(j.end)}${late ? ' ⏰เกินกำหนด' : ''}` : ''}${doing}${blk}`);
     });
   }
   if (!any) return ['🛠 Top 5 งานซ่อมความเสี่ยงเครื่องจักร (BD): ยังไม่มีงานในรายการ'];

@@ -10,6 +10,18 @@ import { TH_M, pd } from '../src/lib/dates.js';
 
 const API = (env) => env.LINE_API_BASE || 'https://api.line.me';
 const MAX_TEXT = 4900; // LINE text messages are limited to 5,000 characters
+// Long text is split at line breaks into up to 5 text bubbles of one request (LINE counts a push per recipient,
+// not per bubble, so the quota is unchanged).
+export function textMessages(text) {
+  const out = [];
+  let cur = '';
+  for (const line of String(text).split('\n')) {
+    const piece = line.slice(0, MAX_TEXT);
+    if (cur && cur.length + 1 + piece.length > MAX_TEXT) { out.push(cur); cur = piece; } else cur = cur ? `${cur}\n${piece}` : piece;
+  }
+  if (cur || !out.length) out.push(cur);
+  return out.slice(0, 5).map((t) => ({ type: 'text', text: t }));
+}
 
 export const lineConfigured = (env) => !!(env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_TO);
 const recipients = (env) => String(env.LINE_TO || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -29,11 +41,11 @@ async function call(env, path, payload) {
 /** Push one text to every LINE_TO recipient. */
 export async function linePush(env, text) {
   if (!lineConfigured(env)) throw Object.assign(new Error('LINE is not configured'), { lineStatus: 0 });
-  for (const to of recipients(env)) await call(env, '/v2/bot/message/push', { to, messages: [{ type: 'text', text: text.slice(0, MAX_TEXT) }] });
+  for (const to of recipients(env)) await call(env, '/v2/bot/message/push', { to, messages: textMessages(text) });
 }
 
 export const lineReply = (env, replyToken, text) =>
-  call(env, '/v2/bot/message/reply', { replyToken, messages: [{ type: 'text', text: text.slice(0, MAX_TEXT) }] });
+  call(env, '/v2/bot/message/reply', { replyToken, messages: textMessages(text) });
 
 /** X-Line-Signature = base64(HMAC-SHA256(channel secret, raw body)). */
 export async function verifyLineSignature(secret, rawBody, signature) {
@@ -86,7 +98,7 @@ export async function remindIfNoUpload(env, db, scheduledTime, url) {
   await linePush(env, [
     `⏰ ยังไม่ได้อัปโหลดไฟล์ CMMS ประจำวันนี้ (รอบ 16:30 น.)`,
     `อัปโหลดล่าสุด: ${last ? `${thaiDate(new Date(Date.parse(last) + 7 * 3600e3).toISOString().slice(0, 10))} ${hm(last)} น.` : 'ยังไม่เคย'}`,
-    'สรุปประจำวันจะส่งเข้า LINE หลังอัปโหลด (โหมดแก้ไข → อัปโหลด WO Backlog)',
+    'สรุปประจำวันจะส่งเข้า LINE หลังอัปโหลด (โหมดแก้ไข -> อัปโหลด WO Backlog)',
     ...(url ? [`🔗 ${url}`] : []),
   ].join('\n'));
   return 'sent';
