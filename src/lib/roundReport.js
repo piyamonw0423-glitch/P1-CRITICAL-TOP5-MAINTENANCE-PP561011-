@@ -26,7 +26,7 @@ export function plantNumbers(cur, prev, ids) {
  * @param ids        plants to include (default all)
  */
 export function roundReportText({ cur, prev = null, backlog = null, url = '', ids = PLANT_IDS }) {
-  if (!cur) return `ยังไม่มีรายงาน — อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
+  if (!cur) return `ยังไม่มีรายงาน – อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
   const last = cur.rounds?.at(-1);
   const all = plantNumbers(cur, prev, ids);
   const byWo = new Map((backlog?.rows || []).map((r) => [String(r.wo), r]));

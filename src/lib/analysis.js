@@ -42,7 +42,7 @@ const firstName = (s) => String(s || '').trim().split(/\s+/)[0] || s;
  * @param today      Date (Thai day) used only for that fallback
  */
 export function analysisText({ cur, prev = null, backlog = null, url = '', today = new Date(), latest = true, jobs = null }) {
-  if (!cur) return `ยังไม่มีรายงาน — อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
+  if (!cur) return `ยังไม่มีรายงาน – อัปโหลดไฟล์ CMMS ในโหมดแก้ไขก่อน${url ? `\n🔗 ${url}` : ''}`;
   cur = withEntered(cur, backlog, latest); // "entered" of the latest day comes from the WO list itself
   const ids = PLANT_IDS;
   const now = cur.dash || (backlog ? compactDash(backlog.rows, today) : null);
@@ -132,7 +132,7 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
       const out = was.o365.filter((w) => !nowSet.has(w)), crossed = now.o365.filter((w) => !wasSet.has(w));
       const few = (l) => (l.length && l.length <= 5 ? `: ${l.join(', ')}` : '');
       if (now.over365 || out.length) {
-        warn.push(`• งานค้างเกิน 1 ปี ${now.over365} WO (${sign(d365)})${!out.length && !crossed.length ? ' — ยังไม่มีการปิด' : ''}`);
+        warn.push(`• งานค้างเกิน 1 ปี ${now.over365} WO (${sign(d365)})${!out.length && !crossed.length ? ' – ยังไม่มีการปิด' : ''}`);
         if (out.length) warn.push(`  ✅ ปิด/ออกจากรายการ ${out.length} WO${few(out)}`);
         if (crossed.length) warn.push(`  ⏳ เพิ่งครบ 1 ปี ${crossed.length} WO${few(crossed)}`);
       }
@@ -157,16 +157,16 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     const acts = [];
     if (now.over365) {
       const who = now.appr365[0];
-      acts.push(`เคลียร์งานค้างเกิน 1 ปี ${now.over365} WO ก่อน — Section ทบทวนว่าจะดำเนินการต่อหรือยกเลิก${who ? ` (${who[1]} WO รอคุณ ${firstName(who[0])} พิจารณา/อนุมัติ)` : ''}`);
+      acts.push(`เคลียร์งานค้างเกิน 1 ปี ${now.over365} WO ก่อน – Section ทบทวนว่าจะดำเนินการต่อหรือยกเลิก${who ? ` (${who[1]} WO รอคุณ ${firstName(who[0])} พิจารณา/อนุมัติ)` : ''}`);
     }
-    if (topTeam?.[1]) acts.push(`ทีม ${topTeam[0]} ทบทวนงานค้างเกิน 180 วัน ${topTeam[1]} WO — อัปเดตแผน วันเข้างาน หรือปิดงานที่ไม่จำเป็น`);
+    if (topTeam?.[1]) acts.push(`ทีม ${topTeam[0]} ทบทวนงานค้างเกิน 180 วัน ${topTeam[1]} WO – อัปเดตแผน วันเข้างาน หรือปิดงานที่ไม่จำเป็น`);
     if (entered?.length) {
       const waitPlan = entered.filter((x) => GROUP_OF(rowOf(x[0])) === 'plan').length;
-      acts.push(`งานเข้าใหม่ ${entered.length} WO${waitPlan ? ` (รอวางแผน/อนุมัติ ${waitPlan})` : ''} — วางแผนและมอบหมายผู้รับผิดชอบให้ชัดภายในสัปดาห์นี้`);
+      acts.push(`งานเข้าใหม่ ${entered.length} WO${waitPlan ? ` (รอวางแผน/อนุมัติ ${waitPlan})` : ''} – วางแผนและมอบหมายผู้รับผิดชอบให้ชัดภายในสัปดาห์นี้`);
     }
-    if (t.finish) acts.push(`งานเสร็จรอปิดสะสม ${t.finish} WO (FINISH/WACCEPT/COMP) — ตรวจรับและปิดงาน (CLOSE) ในระบบให้ครบ`);
+    if (t.finish) acts.push(`งานเสร็จรอปิดสะสม ${t.finish} WO (FINISH/WACCEPT/COMP) – ตรวจรับและปิดงาน (CLOSE) ในระบบให้ครบ`);
     const parts = now.groups.material?.[0];
-    if (parts) acts.push(`รออะไหล่ ${parts} WO — ติดตามการจัดหาอะไหล่และแจ้งวันที่คาดว่าจะได้รับ`);
+    if (parts) acts.push(`รออะไหล่ ${parts} WO – ติดตามการจัดหาอะไหล่และแจ้งวันที่คาดว่าจะได้รับ`);
     if (acts.length) lines.push('🎯 แนวทางดำเนินงาน', ...acts.map((x, i) => `${i + 1}. ${x}`), '', 'รบกวนเจ้าของงานช่วยเร่งเคลียร์ค่ะ 🙏', '');
   }
   lines.push(`📌 ข้อมูลจาก CMMS${last?.fileName ? ` (${last.fileName})` : ''}`);
@@ -280,7 +280,7 @@ export function top5Lines(jobs, today = new Date()) {
   for (const id of PLANT_IDS) {
     const list = (jobs || []).filter((j) => Number(j.plant) === id && listOf(j) === 'risk' && j.status !== 'done')
       .sort((a, b) => (a.rank || 99) - (b.rank || 99)).slice(0, TOP_N);
-    if (!list.length) { out.push(`PP${id}: — ไม่มีงานค้างในรายการ`); continue; }
+    if (!list.length) { out.push(`PP${id}: – ไม่มีงานค้างในรายการ`); continue; }
     any = true;
     out.push(`PP${id}:`);
     list.forEach((j, i) => {
