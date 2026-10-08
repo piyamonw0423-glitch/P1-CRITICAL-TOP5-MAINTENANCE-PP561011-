@@ -5,7 +5,6 @@ import { BLOCK, PLANT_IDS, TOP_N, bucket, listOf } from './data.js';
 import { TH_M, pd } from './dates.js';
 import { STATUS_GROUPS, TEAMS, groupOf, insertedWos, normWo, statTotals, withEntered } from './cmms.js';
 import { backlogDashboard } from './backlogDash.js';
-import { plantNumbers, roundLabel } from './roundReport.js';
 
 const GROUP = Object.fromEntries(STATUS_GROUPS.map((g) => [g.key, g]));
 const TEAM_KEYS = TEAMS.filter((t) => t.k !== 'OTHER').map((t) => t.k);
@@ -78,6 +77,8 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
     const same = deltas.filter(([, d]) => !d).map(([k]) => k);
     lines.push(`• ${[...changed, ...(same.length ? [`${same.join(', ')} เท่าเดิม`] : [])].join(' | ')}`);
   }
+  // Top 5 machine-risk (BD) jobs the team tracks, per plant (team's order: right after the backlog change)
+  if (jobs) lines.push('', ...top5Lines(jobs, today));
   // Overview like the team's sheet (needs both days' summaries).
   if (now && was && now.max != null && was.max != null) {
     const f1 = (n) => n.toFixed(1);
@@ -118,18 +119,6 @@ export function analysisText({ cur, prev = null, backlog = null, url = '', today
   if (!opened.length) lines.push('• ไม่มีงานที่ Actual Start เป็นวันนี้');
   lines.push(`✅ CLOSED ${t.closed} WO${t.assumed ? ` (Status ${t.closedStatus} + ไม่พบในไฟล์ ${t.assumed})` : ''} · เสร็จรอปิดวันนี้ ${t.finished} WO`);
   lines.push('');
-
-  // 3) Per plant
-  for (const id of ids) {
-    const n = plantNumbers(cur, prev, [id]);
-    const base = was?.plants?.[id];
-    const delta = base != null ? n.open - base : n.delta;
-    lines.push(`🏭 PP${id}: เปิดงาน ${n.opened} · ⚡แทรก ${n.inserted} · เสร็จ/ปิด ${n.done} · คงค้าง ${n.open}${delta != null ? ` (${sign(delta)})` : ''}`);
-  }
-  lines.push('');
-
-  // 3b) Top 5 machine-risk (BD) jobs the team tracks, per plant
-  if (jobs) lines.push(...top5Lines(jobs, today), '');
 
   // 4) What still needs pushing (rules on the stored summaries) and what the team should do about it
   if (now) {
@@ -269,12 +258,12 @@ export function reportText(args) {
 const shortDay = (iso) => { if (!iso) return ''; const d = pd(iso); return `${d.getDate()} ${TH_M[d.getMonth()]}`; };
 
 /**
- * "🛠 Top 5 ความเสี่ยงเครื่องจักร (BD)": per plant, the first TOP_N open jobs of the BD list by rank —
+ * "🛠 Top 5 งานซ่อมความเสี่ยงเครื่องจักร (BD)": per plant, the first TOP_N open jobs of the BD list by rank —
  * WO, problem, progress, due date (⏰ when overdue) and the blocker. Done jobs are left out.
  */
 export function top5Lines(jobs, today = new Date()) {
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const out = ['🛠 Top 5 ความเสี่ยงเครื่องจักร (BD)'];
+  const out = ['🛠 Top 5 งานซ่อมความเสี่ยงเครื่องจักร (BD)'];
   let any = false;
   for (const id of PLANT_IDS) {
     const list = (jobs || []).filter((j) => Number(j.plant) === id && listOf(j) === 'risk' && j.status !== 'done')
@@ -288,6 +277,6 @@ export function top5Lines(jobs, today = new Date()) {
       out.push(`${i + 1}) ${j.wo ? `${j.wo} ` : ''}${String(j.issue || '').slice(0, 50)} · ${Number(j.progress) || 0}%${j.end ? ` · กำหนด ${shortDay(j.end)}${late ? ' ⏰เกินกำหนด' : ''}` : ''}${blk}`);
     });
   }
-  if (!any) return ['🛠 Top 5 ความเสี่ยงเครื่องจักร (BD): ยังไม่มีงานในรายการ'];
+  if (!any) return ['🛠 Top 5 งานซ่อมความเสี่ยงเครื่องจักร (BD): ยังไม่มีงานในรายการ'];
   return out;
 }
