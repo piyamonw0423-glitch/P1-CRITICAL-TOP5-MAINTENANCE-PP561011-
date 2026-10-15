@@ -11,7 +11,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_PHOTOS = 4;
 const MAX_PHOTO_CHARS = 400000;
 const STATUSES = ['pending', 'doing', 'done'];
-const BLOCKERS = ['none', 'part', 'permit', 'manpower', 'shutdown', 'vendor', 'budget'];
+const BLOCKERS = ['none', 'part', 'permit', 'manpower', 'shutdown', 'vendor', 'budget', 'area'];
 
 // "Today" in Thailand (UTC+7, no DST), as a local-midnight Date like the client's today0(),
 // so trend snapshots and overdue checks roll over at Thai midnight on any server clock.

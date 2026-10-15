@@ -161,7 +161,7 @@ export function JobModal({ initial, jobs = [], busy, onSave, onDelete, onClose }
         <Field label="6. ติดปัญหาอะไร">
           <select className="field" value={d.blocker} onChange={set('blocker')}>
             <option value="none">ไม่ติดปัญหา</option><option value="part">รออะไหล่</option><option value="permit">รอ Permit</option><option value="manpower">ขาดกำลังคน</option>
-            <option value="shutdown">รอหยุดเครื่อง</option><option value="vendor">รอผู้รับเหมา</option><option value="budget">รออนุมัติงบ</option>
+            <option value="shutdown">รอหยุดเครื่อง</option><option value="vendor">รอผู้รับเหมา</option><option value="budget">รออนุมัติงบ</option><option value="area">รอ OPT เคลียร์พื้นที่หน้างาน</option>
           </select>
         </Field>
         <Field label="รายละเอียดปัญหาหน้างาน (ทำไมทำไม่ได้)" wide>

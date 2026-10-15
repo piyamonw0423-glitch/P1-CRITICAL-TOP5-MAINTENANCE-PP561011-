@@ -32,6 +32,7 @@ export const BLOCK = {
   shutdown: { label: 'รอหยุดเครื่อง', solid: 'oklch(0.45 0.05 258)', fg: 'white' },
   vendor: { label: 'รอผู้รับเหมา', solid: 'oklch(0.55 0.16 250)', fg: 'white' },
   budget: { label: 'รออนุมัติงบ', solid: 'oklch(0.55 0.1 195)', fg: 'white' },
+  area: { label: 'รอ OPT เคลียร์พื้นที่หน้างาน', solid: 'oklch(0.62 0.14 145)', fg: 'white' },
   none: { label: 'ไม่ติดปัญหา', solid: 'oklch(0.93 0.06 150)', fg: 'oklch(0.42 0.12 150)' },
 };
 
